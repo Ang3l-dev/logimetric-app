@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Modifica' if house else 'Nuovo' }} immobile — LogiMetric{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>{{ 'Modifica immobile' if house else 'Nuovo immobile' }}</h1>
+    <p class="page-subtitle">{% if house %}{{ house.via }}, {{ house.citta }}{% else %}Inserisci i dati dell'immobile.{% endif %}</p>
+  </div>
+  <a href="{{ url_for('aste.index') }}" class="btn btn-outline">← Torna alla lista</a>
+</div>
+
+<form method="post"
+      action="{{ url_for('aste.update_house', house_id=house.id) if house else url_for('aste.create_house') }}">
+
+  {# ── Anagrafica ── #}
+  <div class="card">
+    <div class="card-header compact"><h2>Dati immobile</h2></div>
+    <div class="form-grid cols-3">
+      <div class="field field-span-2">
+        <label>Via / Indirizzo *</label>
+        <input name="via" type="text" class="input" required
+               value="{{ house.via if house else '' }}" placeholder="Via Roma 12">
+      </div>
+      <div class="field">
+        <label>Città *</label>
+        <input name="citta" type="text" class="input" required
+               value="{{ house.citta if house else '' }}" placeholder="Milano">
+      </div>
+      <div class="field">
+        <label>Superficie (mq)</label>
+        <input name="mq" type="number" step="0.5" class="input"
+               value="{{ house.mq if house and house.mq else '' }}">
+      </div>
+      <div class="field" style="justify-content:flex-end;padding-bottom:8px">
+        <label class="checkbox-label">
+          <input type="checkbox" name="garage" {% if house and house.garage %}checked{% endif %}>
+          Ha il garage / posto auto
+        </label>
+      </div>
+      <div class="field">
+        <label>Data asta</label>
+        <input name="data_asta" type="date" class="input"
+               value="{{ house.data_asta.isoformat() if house and house.data_asta else '' }}">
+      </div>
+      <div class="field field-span-3">
+        <label>Note</label>
+        <textarea name="note" class="input textarea" rows="3"
+                  placeholder="Note libere sull'immobile…">{{ house.note if house else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  {# ── Stato e prezzi ── #}
+  <div class="card">
+    <div class="card-header compact"><h2>Stato e dati economici</h2></div>
+    <div class="form-grid cols-3">
+      <div class="field">
+        <label>Stato</label>
+        <select name="stato" class="input">
+          {% for s_key, s_lbl in stati.items() %}
+          <option value="{{ s_key }}" {% if house and house.stato == s_key %}selected{% elif not house and s_key == 'in_asta' %}selected{% endif %}>{{ s_lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Prezzo base asta (€)</label>
+        <input name="prezzo_base" type="number" step="100" min="0" class="input"
+               value="{{ house.prezzo_base if house and house.prezzo_base else '' }}">
+      </div>
+      <div class="field">
+        <label>Prezzo aggiudicazione (€) <span class="label-hint">— NON include l'anticipo</span></label>
+        <input name="prezzo_aggiudicazione" type="number" step="100" min="0" class="input"
+               value="{{ house.prezzo_aggiudicazione if house and house.prezzo_aggiudicazione else '' }}">
+      </div>
+      <div class="field">
+        <label>Assegno anticipo (€) <span class="label-hint">— spesa separata, divisa tra i partecipanti</span></label>
+        <input name="assegno_anticipo" type="number" step="100" min="0" class="input"
+               value="{{ house.assegno_anticipo if house and house.assegno_anticipo else '' }}"
+               placeholder="0">
+      </div>
+      <div class="field">
+        <label>Anticipo emesso da</label>
+        <select name="anticipo_pagato_da" class="input">
+          <option value="">— Nessuno / non specificato —</option>
+          {% for u in users %}
+          <option value="{{ u.id }}"
+                  {% if house and house.anticipo_pagato_da == u.id %}selected{% endif %}>
+            {{ u.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Stima vendita (€) <span class="label-hint">— tua stima attuale</span></label>
+        <input name="stima_vendita" type="number" step="100" min="0" class="input"
+               value="{{ house.stima_vendita if house and house.stima_vendita else '' }}"
+               placeholder="Valore stimato di vendita">
+      </div>
+      {# Ricavo consuntivo — solo se già venduta #}
+      {% if house and house.stato == 'venduta' %}
+      <div class="field">
+        <label>Prezzo di vendita effettivo (€) <span class="label-hint">— prezzo a cui è stata venduta</span></label>
+        <input name="ricavo_consuntivo" type="number" step="100" min="0" class="input"
+               value="{{ house.ricavo_consuntivo if house and house.ricavo_consuntivo else '' }}">
+      </div>
+      {% else %}
+      <input type="hidden" name="ricavo_consuntivo" value="{{ house.ricavo_consuntivo if house else '' }}">
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Partecipanti ── #}
+  <div class="card">
+    <div class="card-header compact">
+      <h2>Partecipanti</h2>
+      <p>Seleziona gli utenti che hanno partecipato o stanno seguendo questa asta.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
+      {% set part_ids = house.participants.all() | map(attribute='user_id') | list if house else [] %}
+      {% for u in users %}
+      <label class="checkbox-label" style="padding:10px 14px;border:1px solid var(--line);
+             border-radius:var(--radius-sm);background:var(--bg-card-alt);min-width:180px">
+        <input type="checkbox" name="participants" value="{{ u.id }}"
+               {% if u.id in part_ids %}checked{% endif %}>
+        <span class="user-avatar" style="width:26px;height:26px;font-size:.75rem">{{ u.name[0].upper() }}</span>
+        {{ u.name }}
+        {% if u.is_admin %}<span class="role-badge role-admin" style="font-size:.65rem">Admin</span>{% endif %}
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── Spese iniziali (solo nuovo immobile) ── #}
+  {% if not house %}
+  <div class="card">
+    <div class="card-header split">
+      <div>
+        <h2>Spese accessorie</h2>
+        <p>Aggiungi le spese già note. Potrai aggiungerne altre dalla scheda dettaglio.</p>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" onclick="addExpenseRow()">+ Aggiungi spesa</button>
+    </div>
+    <div id="expenseRows" class="stack-md"></div>
+  </div>
+
+  {# ── Scadenze iniziali ── #}
+  <div class="card">
+    <div class="card-header split">
+      <div>
+        <h2>Scadenze</h2>
+        <p>Pre-asta (date da rispettare prima) e post-asta (obblighi dopo l'aggiudicazione).</p>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" onclick="addDeadlineRow()">+ Aggiungi scadenza</button>
+    </div>
+    <div id="deadlineRows" class="stack-md"></div>
+  </div>
+  {% endif %}
+
+  <div style="display:flex;gap:12px;margin-bottom:24px">
+    <button type="submit" class="btn btn-primary btn-lg">
+      {{ 'Salva modifiche' if house else 'Crea immobile' }}
+    </button>
+    <a href="{{ url_for('aste.index') }}" class="btn btn-outline">← Torna alla lista</a>
+  </div>
+</form>
+
+{# ── Zona pericolosa (solo modifica) ── #}
+{% if house %}
+<div class="card" style="border-color:rgba(224,92,92,.2)">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-weight:600;color:var(--danger);margin-bottom:4px">Zona pericolosa</div>
+      <div class="text-muted" style="font-size:.85rem">L'eliminazione è permanente. Le case non aggiudicate vanno semplicemente eliminate.</div>
+    </div>
+    <form method="post" action="{{ url_for('aste.delete_house', house_id=house.id) }}"
+          onsubmit="return confirm('Eliminare definitivamente {{ house.via|e }}, {{ house.citta|e }}?')">
+      <button type="submit" class="btn btn-danger">Elimina immobile</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<script>
+const EXPENSE_CATS = {{ expense_cats | tojson }};
+let expCount = 0, dlCount = 0;
+
+function addExpenseRow() {
+  const i = expCount++;
+  const opts = Object.entries(EXPENSE_CATS).map(([k,v]) =>
+    `<option value="${k}">${v}</option>`).join('');
+  const row = document.createElement('div');
+  row.className = 'dynamic-row';
+  row.innerHTML = `
+    <div class="dynamic-row-header">
+      <span class="dynamic-row-title">Spesa ${i+1}</span>
+      <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.dynamic-row').remove()">Rimuovi</button>
+    </div>
+    <div class="form-grid cols-3">
+      <div class="field"><label>Categoria</label>
+        <select name="exp_cat" class="input">${opts}</select></div>
+      <div class="field field-span-2"><label>Descrizione</label>
+        <input name="exp_desc" type="text" class="input" placeholder="Es. Atto notarile…"></div>
+      <div class="field"><label>Importo (€) *</label>
+        <input name="exp_imp" type="number" step="0.01" min="0" class="input" placeholder="0.00"></div>
+      <div class="field"><label>Data</label>
+        <input name="exp_date" type="date" class="input"></div>
+    </div>`;
+  document.getElementById('expenseRows').appendChild(row);
+}
+
+function addDeadlineRow() {
+  const i = dlCount++;
+  const row = document.createElement('div');
+  row.className = 'dynamic-row';
+  row.innerHTML = `
+    <div class="dynamic-row-header">
+      <span class="dynamic-row-title">Scadenza ${i+1}</span>
+      <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.dynamic-row').remove()">Rimuovi</button>
+    </div>
+    <div class="form-grid cols-3">
+      <div class="field field-span-2"><label>Titolo *</label>
+        <input name="dl_titolo" type="text" class="input" placeholder="Es. Deposito cauzione, Rogito…"></div>
+      <div class="field"><label>Tipo</label>
+        <select name="dl_tipo" class="input">
+          <option value="pre">Pre-asta</option>
+          <option value="post" selected>Post-asta</option>
+        </select></div>
+      <div class="field"><label>Data scadenza</label>
+        <input name="dl_date" type="date" class="input"></div>
+      <div class="field"><label>Alert giorni prima</label>
+        <input name="dl_giorni" type="number" min="1" value="7" class="input"></div>
+    </div>`;
+  document.getElementById('deadlineRows').appendChild(row);
+}
+</script>
+{% endblock %}

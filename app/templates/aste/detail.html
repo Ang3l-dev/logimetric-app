@@ -1,0 +1,502 @@
+{% extends 'base.html' %}
+{% block title %}{{ house.via }}, {{ house.citta }} — LogiMetric{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>{{ house.via }}</h1>
+    <p class="page-subtitle">
+      {{ house.citta }}{% if house.mq %} · {{ house.mq|int }} mq{% endif %}
+      {% if house.garage %} · 🚗 Garage{% endif %}
+    </p>
+  </div>
+  <div style="display:flex;gap:10px">
+    <a href="{{ url_for('aste.edit_house', house_id=house.id) }}" class="btn btn-primary">✎ Modifica</a>
+    <a href="{{ url_for('aste.index') }}" class="btn btn-outline">← Lista</a>
+  </div>
+</div>
+
+{# ── Badge stato + partecipanti ── #}
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px">
+  <span class="status-badge" style="padding:8px 18px;font-size:.9rem;
+        background:{{ stati_colors[house.stato] }}18;color:{{ stati_colors[house.stato] }};
+        border:1px solid {{ stati_colors[house.stato] }}35">
+    {{ stati[house.stato] }}
+  </span>
+  {% if house.data_asta %}
+  <span class="text-muted" style="font-size:.88rem">
+    📅 Asta: {{ house.data_asta.strftime('%d/%m/%Y') }}
+  </span>
+  {% endif %}
+  {% for p in house.participants.all() %}
+  <span style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-card-alt);
+               border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:.82rem">
+    <span class="user-avatar" style="width:22px;height:22px;font-size:.65rem">{{ p.user.name[0].upper() }}</span>
+    {{ p.user.name }}
+  </span>
+  {% endfor %}
+</div>
+
+{# ── KPI economici ── #}
+<div class="task-kpi-strip">
+  <div class="kpi-card kpi-blue">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.2f}'.format(house.prezzo_aggiudicazione or 0).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">Aggiudicazione</div>
+  </div>
+  {% if house.assegno_anticipo %}
+  <div class="kpi-card kpi-yellow">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.2f}'.format(house.assegno_anticipo).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">Anticipo (diviso)</div>
+  </div>
+  {% endif %}
+  <div class="kpi-card kpi-yellow">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.2f}'.format(house.spese_totali).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">Spese accessorie</div>
+  </div>
+  <div class="kpi-card" style="border-color:rgba(168,85,247,.25)">
+    <div class="kpi-val kpi-val-sm" style="color:#a855f7">{{ '{:,.2f}'.format(house.costo_totale).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">Costo totale</div>
+  </div>
+  <div class="kpi-card" style="border-color:rgba(168,85,247,.2)">
+    <div class="kpi-val kpi-val-sm" style="color:#a855f7">{{ '{:,.2f}'.format(house.stima_vendita or 0).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">Stima vendita</div>
+  </div>
+  <div class="kpi-card {% if house.guadagno_stimato >= 0 %}kpi-green{% else %}kpi-red{% endif %}">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.2f}'.format(house.guadagno_stimato).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">G. stimato (tot.)</div>
+  </div>
+  <div class="kpi-card" style="border-color:rgba(168,85,247,.15)">
+    <div class="kpi-val kpi-val-sm" style="color:#a855f7">{{ '{:,.2f}'.format(house.guadagno_stimato / house.n_partecipanti).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">G. stimato / partec.</div>
+  </div>
+  {% if house.ricavo_consuntivo %}
+  <div class="kpi-card {% if house.guadagno_reale >= 0 %}kpi-green{% else %}kpi-red{% endif %}">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.2f}'.format(house.guadagno_reale).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">G. reale (tot.)</div>
+  </div>
+  <div class="kpi-card {% if house.guadagno_reale >= 0 %}kpi-green{% else %}kpi-red{% endif %}">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.2f}'.format(house.guadagno_reale / house.n_partecipanti).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">G. reale / partec.</div>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Sezione vendita ── #}
+{% if house.stato == 'venduta' and house.ricavo_consuntivo %}
+{# Casa venduta — mostra riepilogo finale #}
+<div class="card" style="border-color:rgba(61,191,124,.3);background:rgba(61,191,124,.04);margin-bottom:20px">
+  <div class="card-header compact">
+    <h2 style="color:var(--success)">✓ Venduta</h2>
+    <p>Riepilogo finale dell'operazione</p>
+  </div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap">
+    <div class="saldo-box saldo-pos" style="flex:1;min-width:140px">
+      <div class="saldo-label">Prezzo di vendita</div>
+      <div class="saldo-val">{{ '{:,.2f}'.format(house.ricavo_consuntivo).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    </div>
+    <div class="saldo-box" style="flex:1;min-width:140px">
+      <div class="saldo-label">Costo totale sostenuto</div>
+      <div class="saldo-val">{{ '{:,.2f}'.format(house.costo_totale).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    </div>
+    <div class="saldo-box {% if house.guadagno_reale >= 0 %}saldo-pos{% else %}saldo-neg{% endif %}" style="flex:1;min-width:140px">
+      <div class="saldo-label">Guadagno netto (= vendita − costo)</div>
+      <div class="saldo-val">{{ '{:,.2f}'.format(house.guadagno_reale).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    </div>
+    <div class="saldo-box {% if house.guadagno_reale >= 0 %}saldo-pos{% else %}saldo-neg{% endif %}" style="flex:1.5;min-width:160px;border-width:2px">
+      <div class="saldo-label">Quota per partecipante (÷ {{ house.n_partecipanti }})</div>
+      <div class="saldo-val" style="font-size:1.3rem">
+        {{ '{:,.2f}'.format(house.guadagno_reale / house.n_partecipanti).replace(',','X').replace('.',',').replace('X','.') }} €
+      </div>
+    </div>
+  </div>
+</div>
+
+{% elif house.stato != 'in_asta' %}
+{# Casa acquistata ma non ancora venduta — mostra form registra vendita #}
+<div class="card" style="border-color:rgba(31,163,255,.2);margin-bottom:20px">
+  <div class="card-header compact">
+    <div>
+      <h2>Registra vendita</h2>
+      <p>Inserisci il prezzo di vendita effettivo — il sistema calcolerà automaticamente guadagno netto e quota per partecipante.</p>
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('aste.registra_vendita', house_id=house.id) }}">
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field" style="flex:1;min-width:200px">
+        <label>Prezzo di vendita effettivo (€) *</label>
+        <input name="prezzo_vendita" type="number" step="100" min="1" class="input" required
+               placeholder="Es. 95000">
+      </div>
+      <div style="padding-bottom:0">
+        <button type="submit" class="btn btn-primary" style="white-space:nowrap"
+                onclick="return confirm('Registrare la vendita? Lo stato passerà a Venduta.')">
+          💰 Registra vendita
+        </button>
+      </div>
+    </div>
+    <div class="text-muted" style="font-size:.82rem;margin-top:10px">
+      Formula: guadagno netto = prezzo vendita − costo totale
+      ({{ '{:,.2f}'.format(house.costo_totale).replace(',','X').replace('.',',').replace('X','.') }} €) ÷ {{ house.n_partecipanti }} partecipanti
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{# ── Anticipo ── #}
+{% if house.assegno_anticipo %}
+<div class="info-banner" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+  <div>
+    <strong>Assegno di anticipo:</strong>
+    {{ '{:,.2f}'.format(house.assegno_anticipo).replace(',','X').replace('.',',').replace('X','.') }} €
+    {% if house.anticipo_payer %}— emesso da <strong>{{ house.anticipo_payer.name }}</strong>{% endif %}
+  </div>
+  <div class="text-muted" style="font-size:.82rem">
+    Incluso nel calcolo dare/avere · non sommato all'aggiudicazione
+  </div>
+</div>
+{% endif %}
+
+{# ── Saldi partecipanti ── #}
+{% if saldi %}
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header compact"><h2>Dare / Avere partecipanti</h2>
+    <p>Quota pro capite: <strong>{{ '{:,.2f}'.format(house.quota_pro_capite).replace(',','X').replace('.',',').replace('X','.') }} €</strong>
+    (totale da dividere: {{ '{:,.2f}'.format(house.totale_da_dividere).replace(',','X').replace('.',',').replace('X','.') }} € / {{ house.n_partecipanti }} partecipanti)</p>
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    {% for s in saldi %}
+    <div class="saldo-box {% if s.saldo >= 0 %}saldo-pos{% elif s.saldo < 0 %}saldo-neg{% endif %}"
+         style="min-width:180px;flex:1">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span class="user-avatar" style="width:28px;height:28px;font-size:.75rem">{{ s.user.name[0].upper() }}</span>
+        <div>
+          <div style="font-weight:700;font-size:.88rem;color:var(--text)">{{ s.user.name }}</div>
+          {% if s.participant.quota_versata %}
+          <div style="font-size:.68rem;color:var(--success)">✓ Quota confermata</div>
+          {% endif %}
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);margin-bottom:4px">
+        <span>Versato</span><span style="color:var(--text);font-weight:600">{{ '{:,.2f}'.format(s.pagato).replace(',','X').replace('.',',').replace('X','.') }} €</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);margin-bottom:8px">
+        <span>Quota</span><span style="color:var(--text);font-weight:600">{{ '{:,.2f}'.format(s.quota).replace(',','X').replace('.',',').replace('X','.') }} €</span>
+      </div>
+      <div style="border-top:1px solid var(--line);padding-top:8px">
+        <div class="saldo-label">{% if s.saldo > 0 %}Deve ricevere{% elif s.saldo < 0 %}Deve versare{% else %}In pari{% endif %}</div>
+        <div class="saldo-val">{{ '{:,.2f}'.format(s.saldo|abs).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+{# ── Spese ── #}
+<div>
+  <div class="card">
+    <div class="card-header split">
+      <div><h2>Spese accessorie</h2></div>
+      <button class="btn btn-primary btn-sm" onclick="toggleForm('expForm')">+ Aggiungi</button>
+    </div>
+
+    <div id="expForm" style="display:none;margin-bottom:20px;padding:16px;
+         background:var(--bg-card-alt);border:1px solid var(--line);border-radius:var(--radius-sm)">
+      <form method="post" action="{{ url_for('aste.add_expense', house_id=house.id) }}">
+        <div class="form-grid cols-2">
+          <div class="field">
+            <label>Categoria</label>
+            <select name="categoria" class="input">
+              {% for k,v in expense_cats.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Chi ha pagato fisicamente *</label>
+            <select name="paid_by_user_id" class="input" required>
+              {% for p in parts %}
+              <option value="{{ p.user_id }}" {% if p.user_id == current_user.id %}selected{% endif %}>
+                {{ p.user.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Importo (€) *</label>
+            <input name="importo" type="number" step="0.01" min="0" class="input" required>
+          </div>
+          <div class="field">
+            <label>Data</label>
+            <input name="data" type="date" class="input">
+          </div>
+          <div class="field field-span-2">
+            <label>Descrizione</label>
+            <input name="descrizione" type="text" class="input" placeholder="Dettaglio spesa…">
+          </div>
+          <div class="field field-span-2" style="justify-content:flex-end">
+            <button type="submit" class="btn btn-primary">Salva e notifica partecipanti</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    {% if exp_details %}
+    <div class="stack-md" style="margin-top:8px">
+      {% for ed in exp_details %}
+      {% set e = ed.expense %}
+      <div class="dynamic-row" style="border-color:{% if ed.ricevuto %}rgba(61,191,124,.3){% else %}var(--line){% endif %}">
+
+        {# ── Intestazione spesa ── #}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="cat-badge" style="background:var(--bg-card);border:1px solid var(--line);font-size:.72rem">
+                {{ expense_cats.get(e.categoria, e.categoria) }}
+              </span>
+              {% if e.descrizione %}
+              <span style="font-weight:600;font-size:.9rem">{{ e.descrizione }}</span>
+              {% endif %}
+              <span style="font-size:.8rem;color:var(--muted)">
+                {{ e.data.strftime('%d/%m/%Y') if e.data else '' }}
+              </span>
+            </div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:1.05rem;font-weight:800;color:var(--primary)">
+                {{ '{:,.2f}'.format(e.importo).replace(',','X').replace('.',',').replace('X','.') }} €
+              </span>
+              <span class="text-muted" style="font-size:.82rem">
+                pagato da
+                <strong style="color:var(--text)">
+                  {% if e.paid_by %}{{ e.paid_by.name }}{% else %}—{% endif %}
+                </strong>
+              </span>
+              <span class="text-muted" style="font-size:.82rem">
+                · quota per partecipante:
+                <strong style="color:var(--text)">
+                  {{ '{:,.2f}'.format(ed.quota).replace(',','X').replace('.',',').replace('X','.') }} €
+                </strong>
+                ({{ house.n_partecipanti }} part.)
+              </span>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            {% if ed.ricevuto %}
+            <span class="status-badge" style="background:rgba(61,191,124,.12);color:var(--success);border:1px solid rgba(61,191,124,.3);font-size:.72rem">✓ Saldato</span>
+            {% endif %}
+            <form method="post"
+                  action="{{ url_for('aste.delete_expense', house_id=house.id, exp_id=e.id) }}"
+                  onsubmit="return confirm('Eliminare questa spesa?')">
+              <button class="btn btn-danger btn-sm">✕</button>
+            </form>
+          </div>
+        </div>
+
+        {# ── Debitori: chi deve dare ── #}
+        {% if ed.debtors %}
+        <div style="background:var(--bg-soft);border-radius:var(--radius-xs);padding:10px 12px">
+          <div class="text-muted" style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+            Devono versare {{ '{:,.2f}'.format(ed.quota).replace(',','X').replace('.',',').replace('X','.') }} € a
+            {% if e.paid_by %}{{ e.paid_by.name }}{% endif %}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            {% for d in ed.debtors %}
+            <div style="display:flex;align-items:center;gap:8px;background:var(--bg-card);
+                        border:1px solid {% if d.versato %}rgba(61,191,124,.35){% else %}rgba(224,92,92,.35){% endif %};
+                        border-radius:var(--radius-xs);padding:6px 12px">
+              <span class="user-avatar" style="width:22px;height:22px;font-size:.62rem">{{ d.user.name[0].upper() }}</span>
+              <span style="font-size:.82rem;font-weight:600">{{ d.user.name }}</span>
+              {% if d.versato %}
+              <span style="font-size:.72rem;color:var(--success)">✓ versato</span>
+              {% else %}
+              <span style="font-size:.72rem;color:var(--danger)">⏳ da versare</span>
+              <button onclick="expVersato({{ e.id }}, {{ house.id }}, this)"
+                      class="btn btn-sm btn-outline" style="padding:3px 8px;font-size:.72rem">
+                Conferma
+              </button>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+
+          {# Pulsante "ho ricevuto tutto" — visibile solo a chi ha pagato #}
+          {% if e.paid_by and e.paid_by.id == current_user.id %}
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft)">
+            <button onclick="expRicevuto({{ e.id }}, {{ house.id }}, this)"
+                    class="btn btn-sm {% if ed.ricevuto %}btn-success{% else %}btn-primary{% endif %}"
+                    id="btn-ricevuto-exp-{{ e.id }}">
+              {% if ed.ricevuto %}✓ Ho ricevuto tutte le quote{% else %}Conferma ricezione{% endif %}
+            </button>
+            {% if ed.ricevuto %}
+            <span class="text-muted" style="font-size:.72rem;margin-left:8px">Spesa saldata ✓</span>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="text-muted" style="font-size:.8rem;font-style:italic">
+          Nessun debitore — tutti i partecipanti hanno contribuito.
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {# Totale #}
+    <div style="display:flex;justify-content:flex-end;padding:12px 0;border-top:1px solid var(--line);margin-top:8px">
+      <span class="text-muted" style="font-size:.85rem;margin-right:12px">Totale spese accessorie:</span>
+      <strong style="color:var(--primary);font-size:1rem">
+        {{ '{:,.2f}'.format(house.spese_totali).replace(',','X').replace('.',',').replace('X','.') }} €
+      </strong>
+    </div>
+
+    {% else %}
+    <p class="text-muted" style="font-size:.88rem;margin-top:8px">Nessuna spesa registrata.</p>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Scadenze ── #}
+<div>
+  <div class="card">
+    <div class="card-header split">
+      <div><h2>Scadenze</h2></div>
+      <button class="btn btn-primary btn-sm" onclick="toggleForm('dlForm')">+ Aggiungi</button>
+    </div>
+
+    <div id="dlForm" style="display:none;margin-bottom:20px;padding:16px;
+         background:var(--bg-card-alt);border:1px solid var(--line);border-radius:var(--radius-sm)">
+      <form method="post" action="{{ url_for('aste.add_deadline', house_id=house.id) }}">
+        <div class="form-grid cols-2">
+          <div class="field field-span-2">
+            <label>Titolo *</label>
+            <input name="titolo" type="text" class="input" required placeholder="Es. Rogito, Deposito…">
+          </div>
+          <div class="field">
+            <label>Tipo</label>
+            <select name="tipo" class="input">
+              <option value="pre">Pre-asta</option>
+              <option value="post" selected>Post-asta</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Data scadenza</label>
+            <input name="data_scadenza" type="date" class="input">
+          </div>
+          <div class="field">
+            <label>Alert giorni prima</label>
+            <input name="giorni_alert" type="number" min="1" value="7" class="input">
+          </div>
+          <div class="field" style="justify-content:flex-end">
+            <button type="submit" class="btn btn-primary">Salva scadenza</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    {% if deadlines %}
+    <div class="stack-md">
+      {% for dl in deadlines %}
+      <div class="dynamic-row {% if dl.completata %}opacity-50{% endif %}"
+           style="border-color:{% if dl.is_overdue %}rgba(224,92,92,.3){% elif dl.is_urgent %}rgba(245,166,35,.3){% else %}var(--line){% endif %}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-weight:600;{% if dl.completata %}text-decoration:line-through;color:var(--muted){% endif %}">
+                {{ dl.titolo }}
+              </span>
+              <span class="cat-badge" style="font-size:.68rem;background:var(--bg-card);border:1px solid var(--line)">
+                {{ 'Pre-asta' if dl.tipo == 'pre' else 'Post-asta' }}
+              </span>
+            </div>
+            <div style="font-size:.8rem;margin-top:4px;
+                 color:{% if dl.is_overdue %}var(--danger){% elif dl.is_urgent %}#f5a623{% else %}var(--muted){% endif %}">
+              {% if dl.data_scadenza %}
+                📅 {{ dl.data_scadenza.strftime('%d/%m/%Y') }}
+                {% if dl.is_overdue %} — ⚠ SCADUTA
+                {% elif dl.is_urgent %} — ⚠ Urgente ({{ dl.giorni_alert }}gg alert)
+                {% endif %}
+              {% else %}—{% endif %}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button onclick="toggleDl({{ dl.id }}, {{ house.id }}, this)"
+                    class="btn btn-sm {% if dl.completata %}btn-outline{% else %}btn-success{% endif %}">
+              {{ '↩ Riapri' if dl.completata else '✓ Fatto' }}
+            </button>
+            <form method="post"
+                  action="{{ url_for('aste.delete_deadline', house_id=house.id, dl_id=dl.id) }}"
+                  onsubmit="return confirm('Eliminare questa scadenza?')">
+              <button class="btn btn-danger btn-sm">✕</button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted" style="font-size:.88rem">Nessuna scadenza registrata.</p>
+    {% endif %}
+  </div>
+</div>
+</div>
+
+{# ── Note ── #}
+{% if house.note %}
+<div class="card">
+  <div class="card-header compact"><h2>Note</h2></div>
+  <p style="color:var(--muted);white-space:pre-wrap;line-height:1.7;margin:0">{{ house.note }}</p>
+</div>
+{% endif %}
+
+{# ── Log modifiche ── #}
+{% if audit %}
+<div class="card">
+  <div class="card-header compact"><h2>Storico modifiche</h2></div>
+  <div class="table-wrap">
+    <table class="data-table" style="font-size:.82rem">
+      <thead>
+        <tr><th>Data/Ora</th><th>Utente</th><th>Campo</th><th>Da</th><th>A</th></tr>
+      </thead>
+      <tbody>
+        {% for a in audit %}
+        <tr>
+          <td class="text-muted">{{ a.modified_at.strftime('%d/%m/%Y %H:%M') }}</td>
+          <td>{{ a.user.name if a.user else '—' }}</td>
+          <td><code>{{ a.campo }}</code></td>
+          <td class="text-muted">{{ a.valore_prima or '—' }}</td>
+          <td>{{ a.valore_dopo or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<script>
+function toggleForm(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function toggleDl(dlId, houseId, btn) {
+  const r = await fetch(`/aste/${houseId}/scadenze/${dlId}/toggle`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) location.reload();
+}
+
+async function expVersato(expId, houseId, btn) {
+  const r = await fetch(`/aste/${houseId}/spese/${expId}/versato`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) location.reload();
+}
+
+async function expRicevuto(expId, houseId, btn) {
+  const r = await fetch(`/aste/${houseId}/spese/${expId}/ricevuto`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || 'Errore'); return; }
+  location.reload();
+}
+</script>
+{% endblock %}

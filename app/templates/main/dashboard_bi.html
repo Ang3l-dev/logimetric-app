@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard BI — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Dashboard BI</h1>
+    <p class="page-subtitle">Report e dashboard Power BI integrati.</p>
+  </div>
+  {% if current_user.is_admin %}
+  <a href="{{ url_for('admin.bi_reports') }}" class="btn btn-outline">⚙ Gestisci report</a>
+  {% endif %}
+</div>
+
+{% if reports %}
+<div class="card">
+  <div class="card-header">
+    <div><h2>Seleziona report</h2></div>
+    <select id="reportSelect" class="input" style="max-width:320px" onchange="loadReport()">
+      <option value="">Seleziona report…</option>
+      {% for r in reports %}
+      <option value="{{ r.embed_url|e }}">{{ r.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div id="reportPlaceholder" class="bi-placeholder">
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="4" y="4" width="56" height="56" rx="8"/>
+      <path d="M12 44l12-14 10 8 10-12 8 6"/>
+    </svg>
+    <p>Seleziona un report dal menu per visualizzarlo.</p>
+  </div>
+  <iframe id="reportFrame" class="bi-frame" src="" style="display:none"
+          allowfullscreen frameborder="0"></iframe>
+</div>
+{% else %}
+<div class="card">
+  <div class="bi-placeholder">
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="4" y="4" width="56" height="56" rx="8"/>
+      <path d="M28 20v24M20 28h24"/>
+    </svg>
+    <p>Nessun report configurato.</p>
+    {% if current_user.is_admin %}
+    <a href="{{ url_for('admin.bi_reports') }}" class="btn btn-primary" style="margin-top:8px">Aggiungi il primo report</a>
+    {% else %}
+    <p class="muted">Contatta l'amministratore per configurare i report.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+function loadReport() {
+  const url = document.getElementById('reportSelect').value;
+  const frame = document.getElementById('reportFrame');
+  const ph = document.getElementById('reportPlaceholder');
+  if (url) { frame.src = url; frame.style.display = 'block'; ph.style.display = 'none'; }
+  else { frame.src = ''; frame.style.display = 'none'; ph.style.display = 'flex'; }
+}
+</script>
+{% endblock %}

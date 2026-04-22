@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Modifica' if task else 'Nuovo' }} Task — LogiMetric{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>{{ 'Modifica task' if task else 'Nuovo task' }}</h1>
+    <p class="page-subtitle">
+      {% if task %}#{{ task.id }} — {{ task.title }}{% else %}Compila i campi e salva.{% endif %}
+    </p>
+  </div>
+  <a href="{{ url_for('tasks.board') }}" class="btn btn-outline">← Board</a>
+</div>
+
+<div class="card" style="max-width:720px">
+  <form method="post"
+        action="{{ url_for('tasks.update_task', task_id=task.id) if task else url_for('tasks.create_task') }}">
+
+    <div class="form-grid cols-2">
+      <div class="field field-span-2">
+        <label for="title">Titolo *</label>
+        <input id="title" name="title" type="text" class="input" required
+               value="{{ task.title if task else '' }}"
+               placeholder="Descrivi brevemente il task…">
+      </div>
+
+      <div class="field field-span-2">
+        <label for="description">Descrizione <span class="label-hint">(opzionale)</span></label>
+        <textarea id="description" name="description" class="input textarea" rows="5"
+                  placeholder="Dettagli, istruzioni, contesto…">{{ task.description if task else '' }}</textarea>
+      </div>
+
+      <div class="field">
+        <label for="category_id">Categoria *</label>
+        <select id="category_id" name="category_id" class="input" required>
+          <option value="">Seleziona…</option>
+          {% for cat in categories %}
+          <option value="{{ cat.id }}"
+                  {% if task and task.category_id == cat.id %}selected
+                  {% elif not task and loop.first %}selected{% endif %}>
+            {{ cat.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="priority">Priorità</label>
+        <select id="priority" name="priority" class="input">
+          {% for k, v in priority_labels.items() %}
+          <option value="{{ k }}"
+                  {% if task and task.priority == k %}selected
+                  {% elif not task and k == 'media' %}selected{% endif %}>
+            {{ v }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="status">Stato</label>
+        <select id="status" name="status" class="input">
+          {% for k, v in status_labels.items() %}
+          <option value="{{ k }}"
+                  {% if task and task.status == k %}selected
+                  {% elif not task and k == 'da_fare' %}selected{% endif %}>
+            {{ v }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field"></div>
+
+      <div class="field">
+        <label for="start_date">Data inizio</label>
+        <input id="start_date" name="start_date" type="date" class="input"
+               value="{{ task.start_date.isoformat() if task and task.start_date else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="due_date">Data scadenza</label>
+        <input id="due_date" name="due_date" type="date" class="input"
+               value="{{ task.due_date.isoformat() if task and task.due_date else '' }}">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:24px;align-items:center">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Salva modifiche' if task else 'Crea task' }}
+      </button>
+      <a href="{{ url_for('tasks.board') }}" class="btn btn-outline">← Torna alla board</a>
+    </div>
+  </form>
+</div>
+
+{# ── Elimina — form SEPARATO, mai annidato ── #}
+{% if task %}
+<div class="card" style="max-width:720px;border-color:rgba(224,92,92,.2);margin-top:0">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-weight:600;color:var(--danger);margin-bottom:4px">Zona pericolosa</div>
+      <div class="text-muted" style="font-size:.85rem">
+        L'eliminazione è permanente e non può essere annullata.
+      </div>
+    </div>
+    <form method="post" action="{{ url_for('tasks.delete_task', task_id=task.id) }}"
+          onsubmit="return confirm('Eliminare definitivamente il task #{{ task.id }}?')">
+      <button type="submit" class="btn btn-danger">Elimina task</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

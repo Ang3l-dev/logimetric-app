@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Risposta inviata — LogiMetric</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#07111f;--bg-card:#0f1e38;--line:rgba(255,255,255,.08);--text:#edf3fb;--muted:#7a90b0;--primary:#1fa3ff;--success:#3dbf7c}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+         min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .card{background:var(--bg-card);border:1px solid var(--line);border-radius:16px;
+          padding:40px 32px;text-align:center;max-width:460px;width:100%}
+    .icon{font-size:3rem;margin-bottom:16px}
+    h1{margin:0 0 12px;font-size:1.5rem}
+    p{color:var(--muted);line-height:1.6;margin:0 0 16px}
+    .badge{display:inline-block;padding:4px 14px;border-radius:999px;font-size:.8rem;font-weight:700;
+           background:rgba(61,191,124,.15);color:var(--success);margin-bottom:20px}
+    .footer{color:var(--muted);font-size:.78rem;margin-top:24px}
+    a{color:var(--primary)}
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">✅</div>
+  <h1>Aggiornamento inviato</h1>
+  <div class="badge">{{ status_labels.get(new_status, new_status) }}</div>
+  <p>Il tuo aggiornamento sul task <strong>#{{ task.id }} — {{ task.title }}</strong>
+     è stato registrato correttamente.</p>
+  <p>Il responsabile è stato notificato automaticamente.</p>
+  <div class="footer">
+    LogiMetric — <a href="https://www.logimetric.eu">logimetric.eu</a>
+  </div>
+</div>
+</body>
+</html>

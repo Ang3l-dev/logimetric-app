@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block title %}Gestione Utenti — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Gestione Utenti</h1>
+    <p class="page-subtitle">Approva registrazioni e gestisci i permessi di accesso.</p>
+  </div>
+</div>
+
+{# ── In attesa di approvazione ── #}
+{% if pending %}
+<div class="card card-alert">
+  <div class="card-header">
+    <div>
+      <h2>In attesa di approvazione <span class="badge-count">{{ pending|length }}</span></h2>
+      <p>Nuovi utenti registrati in attesa di verifica.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Nome</th><th>Email</th><th>Registrato il</th><th class="th-actions">Azioni</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in pending %}
+        <tr>
+          <td><strong>{{ user.name }}</strong></td>
+          <td class="text-muted">{{ user.email }}</td>
+          <td class="text-muted">{{ user.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+          <td class="td-actions">
+            <form method="post" action="{{ url_for('admin.approve_user', user_id=user.id) }}" style="display:inline">
+              <button class="btn btn-success btn-sm">✓ Approva</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.reject_user', user_id=user.id) }}" style="display:inline"
+                  onsubmit="return confirm('Rifiutare e rimuovere {{ user.name }}?')">
+              <button class="btn btn-danger btn-sm">✕ Rifiuta</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="info-banner">Nessuna registrazione in attesa. ✓</div>
+{% endif %}
+
+{# ── Utenti attivi ── #}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h2>Utenti attivi</h2>
+      <p>Clicca su "Permessi" per gestire l'accesso ai moduli.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Nome</th><th>Email</th><th>Ruolo</th>
+          {% for key, label in modules.items() %}
+          <th class="th-module" title="{{ label }}">{{ label.split()[0] }}</th>
+          {% endfor %}
+          <th class="th-actions">Azioni</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in approved %}
+        {% set perms = user.get_permissions_dict() %}
+        <tr>
+          <td><strong>{{ user.name }}</strong></td>
+          <td class="text-muted">{{ user.email }}</td>
+          <td>
+            {% if user.is_admin %}
+            <span class="role-badge role-admin">Admin</span>
+            {% else %}
+            <span class="role-badge role-user">User</span>
+            {% endif %}
+          </td>
+          {% for module_key, module_label in modules.items() %}
+          <td class="td-perm">
+            {% if user.is_admin %}
+              <span class="perm-dot perm-full" title="Accesso completo">●</span>
+            {% elif perms[module_key]['can_write'] %}
+              <span class="perm-dot perm-write" title="Lettura + Scrittura">●</span>
+            {% elif perms[module_key]['can_view'] %}
+              <span class="perm-dot perm-read" title="Solo lettura">●</span>
+            {% else %}
+              <span class="perm-dot perm-none" title="Nessun accesso">○</span>
+            {% endif %}
+          </td>
+          {% endfor %}
+          <td class="td-actions">
+            {% if not user.is_admin %}
+            <a href="{{ url_for('admin.user_permissions', user_id=user.id) }}"
+               class="btn btn-outline btn-sm">Permessi</a>
+            <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}"
+                  style="display:inline"
+                  onsubmit="return confirm('Eliminare definitivamente {{ user.name }}?')">
+              <button class="btn btn-danger btn-sm">Elimina</button>
+            </form>
+            {% else %}
+            <span class="text-muted" style="font-size:.85rem">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <span><span class="perm-dot perm-full">●</span> Admin (accesso completo)</span>
+    <span><span class="perm-dot perm-write">●</span> Lettura + Scrittura</span>
+    <span><span class="perm-dot perm-read">●</span> Solo lettura</span>
+    <span><span class="perm-dot perm-none">○</span> Nessun accesso</span>
+  </div>
+</div>
+{% endblock %}

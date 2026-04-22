@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+{% block title %}KPI Task Manager — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>KPI Task Manager</h1>
+    <p class="page-subtitle">Vista amministrativa su risposte, puntualità, scadenze e tracciabilità operativa.</p>
+  </div>
+  <div style="display:flex;gap:10px">
+    <a href="{{ url_for('tasks.board') }}" class="btn btn-outline">← Task Manager</a>
+  </div>
+</div>
+
+<div class="task-kpi-strip">
+  <div class="kpi-card"><div class="kpi-val">{{ cards.total_tasks }}</div><div class="kpi-label">Task totali</div></div>
+  <div class="kpi-card kpi-blue"><div class="kpi-val">{{ cards.responses_total }}</div><div class="kpi-label">Risposte tracciate</div></div>
+  <div class="kpi-card kpi-green"><div class="kpi-val">{{ cards.completed_on_time }}</div><div class="kpi-label">Chiusi in tempo</div></div>
+  <div class="kpi-card kpi-yellow"><div class="kpi-val">{{ cards.completed_late }}</div><div class="kpi-label">Chiusi in ritardo</div></div>
+  <div class="kpi-card kpi-red"><div class="kpi-val">{{ cards.overdue_open }}</div><div class="kpi-label">Aperti scaduti</div></div>
+  <div class="kpi-card"><div class="kpi-val">{{ cards.response_rate }}%</div><div class="kpi-label">Task con risposta</div></div>
+</div>
+
+<div class="card">
+  <div class="card-header compact">
+    <h2>Grafici sintetici</h2>
+    <p>Distribuzione stati e ranking dei comportamenti operativi.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:18px">
+    <div style="padding:14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card-alt)">
+      <div class="detail-label" style="margin-bottom:10px">Distribuzione task per stato</div>
+      {% set ns = namespace(max=1) %}
+      {% for row in status_counts %}{% if row.count > ns.max %}{% set ns.max = row.count %}{% endif %}{% endfor %}
+      <div style="display:flex;flex-direction:column;gap:10px">
+        {% for row in status_counts %}
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px">
+            <span>{{ row.label }}</span><strong>{{ row.count }}</strong>
+          </div>
+          <div style="height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden">
+            <div style="height:10px;width:{{ (row.count / ns.max * 100) if ns.max else 0 }}%;background:{{ row.color }};border-radius:999px"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div style="padding:14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card-alt)">
+      <div class="detail-label" style="margin-bottom:10px">Top ritardi</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        {% for row in top_late[:5] %}
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px">
+            <span>{{ row.label }}</span><strong>{{ row.late_count }}</strong>
+          </div>
+          <div style="height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden">
+            <div style="height:10px;width:{{ (row.late_count / (top_late[0].late_count if top_late and top_late[0].late_count else 1) * 100) if row.late_count else 0 }}%;background:#e05c5c;border-radius:999px"></div>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted">Nessun dato.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div style="padding:14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card-alt)">
+      <div class="detail-label" style="margin-bottom:10px">Top risposte</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        {% for row in responders[:5] %}
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px">
+            <span>{{ row.label }}</span><strong>{{ row.responses }}</strong>
+          </div>
+          <div style="height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden">
+            <div style="height:10px;width:{{ (row.responses / (responders[0].responses if responders and responders[0].responses else 1) * 100) if row.responses else 0 }}%;background:#1fa3ff;border-radius:999px"></div>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted">Nessun dato.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+  <div class="card">
+    <div class="card-header compact"><h2>Chi ha risposto</h2><p>Ultima risposta e volumi per destinatario.</p></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Utente</th><th>Risposte</th><th>Ultima risposta</th><th>In tempo</th><th>Ritardi</th></tr></thead>
+        <tbody>
+          {% for row in responders %}
+          <tr>
+            <td>{{ row.label }}<div class="text-muted" style="font-size:.78rem">{{ row.email }}</div></td>
+            <td>{{ row.responses }}</td>
+            <td>{{ row.last_response_at.strftime('%d/%m/%Y %H:%M') if row.last_response_at else '—' }}</td>
+            <td>{{ row.on_time_count }}</td>
+            <td>{{ row.late_count }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted">Nessuna risposta registrata.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header compact"><h2>Task aperti scaduti</h2><p>Attività fuori tempo massimo ancora non chiuse.</p></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Titolo</th><th>Scadenza</th><th>Categoria</th><th>Stato</th></tr></thead>
+        <tbody>
+          {% for t in overdue_open %}
+          <tr>
+            <td>{{ t.id }}</td>
+            <td><a href="{{ url_for('tasks.detail', task_id=t.id) }}" style="color:var(--text);font-weight:600">{{ t.title }}</a></td>
+            <td>{{ t.due_date.strftime('%d/%m/%Y') if t.due_date else '—' }}</td>
+            <td>{{ t.category.name if t.category else '—' }}</td>
+            <td><span class="status-badge" style="background:{{ status_colors[t.status] }}20;color:{{ status_colors[t.status] }}">{{ status_labels[t.status] }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted">Nessun task scaduto aperto.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header compact"><h2>Storico recente</h2><p>Chi ha risposto e quando ha risposto.</p></div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Quando</th><th>Task</th><th>Evento</th><th>Attore</th><th>Dettaglio</th></tr></thead>
+      <tbody>
+        {% for ev in recent_events %}
+        <tr>
+          <td>{{ ev.created_at.strftime('%d/%m/%Y %H:%M') if ev.created_at else '—' }}</td>
+          <td><a href="{{ url_for('tasks.detail', task_id=ev.task_id) }}" style="color:var(--text);font-weight:600">#{{ ev.task_id }}</a></td>
+          <td>{{ ev.event_type }}</td>
+          <td>{{ ev.actor_name or ev.actor_email or ev.source or 'Sistema' }}</td>
+          <td class="text-muted">{{ ev.note[:120] if ev.note else '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-muted">Nessun evento recente.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

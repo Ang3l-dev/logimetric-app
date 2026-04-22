@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% block title %}Modulo Trasferta — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Modulo Trasferta</h1>
+    <p class="page-subtitle">Compila il modulo e scarica il file Excel.</p>
+  </div>
+</div>
+
+{# ── Toolbar preset / info ── #}
+<div class="toolbar-grid">
+  <div class="card">
+    <div class="card-header compact">
+      <h2>Preset</h2>
+      <p>Salva e richiama configurazioni predefinite.</p>
+    </div>
+    <div class="preset-row">
+      <select id="presetSelect" class="input">
+        <option value="">Seleziona preset…</option>
+        {% for p in presets %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="button" class="btn btn-outline" id="loadPresetBtn">Carica</button>
+      {% if current_user.can_write('travel_form') %}
+      <button type="button" class="btn btn-danger-outline" id="deletePresetBtn">Elimina</button>
+      {% endif %}
+    </div>
+    {% if current_user.can_write('travel_form') %}
+    <div class="preset-row">
+      <input id="presetName" class="input" placeholder="Nome preset…">
+      <button type="button" class="btn btn-primary" id="savePresetBtn">Salva / Aggiorna</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header compact">
+      <h2>Note operative</h2>
+    </div>
+    <ul class="note-list">
+      <li>Il file Excel generato è compatibile con tutti i sistemi operativi.</li>
+      <li>Il template originale .xls è disponibile su Windows con Excel installato.</li>
+      <li>Il file viene scaricato direttamente dal browser.</li>
+    </ul>
+  </div>
+</div>
+
+{% if current_user.can_write('travel_form') %}
+<form method="post" action="{{ url_for('main.generate_travel') }}" id="travelForm">
+
+  {# ── Dati principali ── #}
+  <div class="card">
+    <div class="card-header">
+      <div><h2>Dati principali</h2><p>Frontespizio della trasferta.</p></div>
+    </div>
+    <div class="form-grid cols-3">
+      <div class="field field-span-3">
+        <label>Tipo trasferta *</label>
+        <div class="radio-group">
+          {% for val, lbl in [('forfettaria','Forfettaria'),('piè di lista','Piè di lista'),('mista','Mista')] %}
+          <label class="radio-label">
+            <input type="radio" name="travel_type" value="{{ val }}"
+                   {% if form_data.get('travel_type','mista') == val %}checked{% endif %}>
+            <span class="radio-track"></span>{{ lbl }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="field"><label>Dal *</label>
+        <input class="input" type="date" name="start_date" value="{{ form_data.get('start_date','') }}"></div>
+      <div class="field"><label>Al *</label>
+        <input class="input" type="date" name="end_date" value="{{ form_data.get('end_date','') }}"></div>
+      <div class="field"><label>Cognome e nome *</label>
+        <input class="input" type="text" name="full_name" value="{{ form_data.get('full_name','') }}"></div>
+      <div class="field"><label>Matricola *</label>
+        <input class="input" type="text" name="employee_id" value="{{ form_data.get('employee_id','') }}"></div>
+      <div class="field"><label>Linea di business *</label>
+        <input class="input" type="text" name="business_line" value="{{ form_data.get('business_line','') }}"></div>
+      <div class="field"><label>Centro di costo *</label>
+        <input class="input" type="text" name="cost_center" value="{{ form_data.get('cost_center','') }}"></div>
+      <div class="field"><label>Sede di assunzione *</label>
+        <input class="input" type="text" name="hiring_location" value="{{ form_data.get('hiring_location','') }}"></div>
+      <div class="field field-span-3"><label>Motivo del viaggio *</label>
+        <textarea class="input textarea" name="travel_reason">{{ form_data.get('travel_reason','') }}</textarea></div>
+    </div>
+  </div>
+
+  {# ── Trasferimenti ── #}
+  <div class="card">
+    <div class="card-header split">
+      <div><h2>Trasferimenti</h2><p>Fino a 8 righe.</p></div>
+      <button class="btn btn-primary btn-sm" type="button" id="addTransferBtn">+ Aggiungi</button>
+    </div>
+    <div id="transfersContainer" class="stack-md"></div>
+  </div>
+
+  {# ── Noleggio auto ── #}
+  <div class="card">
+    <div class="card-header"><div><h2>Noleggio auto</h2><p>Lascia vuoto se non applicabile.</p></div></div>
+    <div class="form-grid cols-3">
+      <div class="field"><label>Luogo ritiro</label>
+        <input class="input" type="text" name="pickup_location" value="{{ form_data.get('pickup_location','') }}"></div>
+      <div class="field"><label>Data ritiro</label>
+        <input class="input" type="date" name="pickup_date" value="{{ form_data.get('pickup_date','') }}"></div>
+      <div class="field"><label>Orario ritiro</label>
+        <input class="input" type="time" name="pickup_time" value="{{ form_data.get('pickup_time','') }}"></div>
+      <div class="field"><label>Luogo riconsegna</label>
+        <input class="input" type="text" name="dropoff_location" value="{{ form_data.get('dropoff_location','') }}"></div>
+      <div class="field"><label>Data riconsegna</label>
+        <input class="input" type="date" name="dropoff_date" value="{{ form_data.get('dropoff_date','') }}"></div>
+      <div class="field"><label>Orario riconsegna</label>
+        <input class="input" type="time" name="dropoff_time" value="{{ form_data.get('dropoff_time','') }}"></div>
+      <div class="field"><label>Categoria veicolo</label>
+        <input class="input" type="text" name="vehicle_category" value="{{ form_data.get('vehicle_category','') }}"></div>
+    </div>
+  </div>
+
+  {# ── Pernottamenti ── #}
+  <div class="card">
+    <div class="card-header split">
+      <div><h2>Pernottamenti</h2><p>Fino a 3 righe.</p></div>
+      <button class="btn btn-primary btn-sm" type="button" id="addStayBtn">+ Aggiungi</button>
+    </div>
+    <div id="staysContainer" class="stack-md"></div>
+  </div>
+
+  {# ── Firma ── #}
+  <div class="card">
+    <div class="card-header"><div><h2>Firma dipendente</h2></div></div>
+    <div class="form-grid cols-2">
+      <div class="field"><label>Nome firma</label>
+        <input class="input" type="text" name="employee_signature_name"
+               value="{{ form_data.get('employee_signature_name','') }}" placeholder="Lascia vuoto = usa il nome sopra"></div>
+      <div class="field"><label>Data firma</label>
+        <input class="input" type="date" name="employee_signature_date"
+               value="{{ form_data.get('employee_signature_date','') }}"></div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary btn-lg">⬇ Genera ed esporta Excel</button>
+    <button type="button" class="btn btn-outline" onclick="document.getElementById('travelForm').reset()">Pulisci</button>
+  </div>
+
+</form>
+{% else %}
+<div class="info-banner">Hai accesso in sola lettura. Contatta l'amministratore per richiedere la generazione dei file.</div>
+{% endif %}
+
+<div id="travelFormData"
+     data-presets="{{ presets | tojson | e }}"
+     data-initial="{{ form_data | tojson | e }}"
+     data-max-transfers="8"
+     data-max-stays="3"
+     data-can-write="{{ 'true' if current_user.can_write('travel_form') else 'false' }}"
+     data-preset-url="{{ url_for('main.get_travel_preset', preset_id=0) }}"
+     data-save-url="{{ url_for('main.save_travel_preset') }}"
+     data-delete-url="{{ url_for('main.delete_travel_preset', preset_id=0) }}"
+     data-send-url="{{ url_for('main.send_travel') }}">
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/travel_form.js') }}"></script>{% endblock %}

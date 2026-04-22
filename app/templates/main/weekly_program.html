@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% block title %}Programma Settimanale — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Programma Settimanale</h1>
+    <p class="page-subtitle">Compila e scarica il programma della settimana.</p>
+  </div>
+</div>
+
+<div class="toolbar-grid">
+  <div class="card">
+    <div class="card-header compact">
+      <h2>Preset</h2><p>Richiama configurazioni salvate.</p>
+    </div>
+    <div class="preset-row">
+      <select id="presetSelect" class="input">
+        <option value="">Seleziona preset…</option>
+        {% for p in presets %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="button" class="btn btn-outline" id="loadPresetBtn">Carica</button>
+      {% if current_user.can_write('weekly_program') %}
+      <button type="button" class="btn btn-danger-outline" id="deletePresetBtn">Elimina</button>
+      {% endif %}
+    </div>
+    {% if current_user.can_write('weekly_program') %}
+    <div class="preset-row">
+      <input id="presetName" class="input" placeholder="Nome preset…">
+      <button type="button" class="btn btn-primary" id="savePresetBtn">Salva / Aggiorna</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header compact"><h2>Note</h2></div>
+    <ul class="note-list">
+      <li>Il programma copre 5 giorni consecutivi (lun-ven).</li>
+      <li>Il template originale con colori e formattazione viene preservato.</li>
+      <li>Il file viene scaricato direttamente.</li>
+    </ul>
+  </div>
+</div>
+
+{% if current_user.can_write('weekly_program') %}
+<form method="post" action="{{ url_for('main.generate_weekly') }}" id="weeklyForm">
+  <div class="card">
+    <div class="card-header">
+      <div><h2>Dati settimana</h2></div>
+    </div>
+    <div class="form-grid cols-3">
+      <div class="field field-span-3"><label>Cognome e nome *</label>
+        <input class="input" type="text" name="full_name" id="full_name"
+               value="{{ form_data.get('full_name','') }}"></div>
+      <div class="field"><label>Data inizio (Lunedì) *</label>
+        <input class="input" type="date" name="start_date" id="start_date"
+               value="{{ form_data.get('start_date','') }}" onchange="autoEndDate()"></div>
+      <div class="field"><label>Data fine (Venerdì) *</label>
+        <input class="input" type="date" name="end_date" id="end_date"
+               value="{{ form_data.get('end_date','') }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div><h2>Sedi giornaliere</h2><p>Inserisci la sede/luogo per ogni giorno.</p></div></div>
+    <div class="form-grid cols-5">
+      {% for i, day in [(1,'Lunedì'),(2,'Martedì'),(3,'Mercoledì'),(4,'Giovedì'),(5,'Venerdì')] %}
+      <div class="field">
+        <label>{{ day }}</label>
+        <input class="input" type="text" name="day_location_{{ i }}"
+               value="{{ form_data.get('day_location_'~i,'') }}" placeholder="{{ day }}…">
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary btn-lg">⬇ Genera ed esporta Excel</button>
+    <button type="button" class="btn btn-outline" onclick="document.getElementById('weeklyForm').reset()">Pulisci</button>
+  </div>
+</form>
+{% else %}
+<div class="info-banner">Hai accesso in sola lettura. Contatta l'amministratore per richiedere la generazione dei file.</div>
+{% endif %}
+
+<div id="weeklyData"
+     data-presets="{{ presets | tojson | e }}"
+     data-can-write="{{ 'true' if current_user.can_write('weekly_program') else 'false' }}"
+     data-preset-url="{{ url_for('main.get_weekly_preset', preset_id=0) }}"
+     data-save-url="{{ url_for('main.save_weekly_preset') }}"
+     data-delete-url="{{ url_for('main.delete_weekly_preset', preset_id=0) }}"
+     data-send-url="{{ url_for('main.send_weekly') }}">
+</div>
+{% if current_user.can_write('weekly_program') %}
+{# ── Sezione Schedulazione ── #}
+<div class="card" style="border-color:{% if schedule and schedule.active %}rgba(31,163,255,.3){% else %}var(--line){% endif %}">
+  <div class="card-header split">
+    <div>
+      <h2>📅 Schedulazione automatica</h2>
+      <p>
+        Ogni <strong>mercoledì alle 14:00</strong> ricevi un'email con i dati precompilati
+        e i pulsanti per confermare l'invio o modificare.
+        {% if schedule and schedule.active %}
+        <span style="color:var(--success);font-weight:600"> — Attiva ✓</span>
+        {% endif %}
+      </p>
+    </div>
+    {% if schedule %}
+    <label class="sched-toggle" title="Attiva/disattiva">
+      <input type="checkbox" id="schedToggle"
+             {% if schedule.active %}checked{% endif %}
+             onchange="toggleSchedule(this)">
+      <span class="sched-slider"></span>
+    </label>
+    {% endif %}
+  </div>
+
+  <form method="post" action="{{ url_for('main.weekly_schedule_save') }}">
+    <input type="hidden" name="sched_active"
+           value="{{ '1' if schedule and schedule.active else '0' }}"
+           id="schedActiveInput">
+    <div class="form-grid cols-3" style="margin-bottom:16px">
+      <div class="field field-span-3">
+        <label>Cognome e nome (fisso nella schedulazione)</label>
+        <input class="input" type="text" name="sched_full_name"
+               value="{{ schedule.full_name if schedule else '' }}"
+               placeholder="Come apparirà nel programma…">
+      </div>
+      {% for i, day in [(1,'Lunedì'),(2,'Martedì'),(3,'Mercoledì'),(4,'Giovedì'),(5,'Venerdì')] %}
+      <div class="field">
+        <label>{{ day }}</label>
+        <input class="input" type="text" name="sched_day_{{ i }}"
+               value="{{ schedule.day_locations[i-1] if schedule else '' }}"
+               placeholder="Sede…">
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if schedule %}
+    <div class="text-muted" style="font-size:.78rem;margin-bottom:12px">
+      {% if schedule.last_reminded_at %}
+        Ultimo reminder: <strong>{{ schedule.last_reminded_at.strftime('%d/%m/%Y %H:%M') }}</strong>
+      {% else %}
+        Nessun reminder ancora inviato.
+      {% endif %}
+      {% if schedule.last_sent_at %}
+        &nbsp;·&nbsp; Ultimo invio confermato: <strong>{{ schedule.last_sent_at.strftime('%d/%m/%Y %H:%M') }}</strong>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Aggiorna schedulazione' if schedule else 'Attiva schedulazione' }}
+      </button>
+      {% if not schedule %}
+      <span class="text-muted" style="font-size:.82rem">
+        Compila i dati e salva per attivare gli invii automatici del mercoledì.
+      </span>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<style>
+.sched-toggle { display:inline-flex;align-items:center;cursor:pointer;flex-shrink:0 }
+.sched-toggle input { display:none }
+.sched-slider {
+  width:48px;height:26px;background:#2a3a54;border-radius:999px;
+  position:relative;transition:background .2s;border:1px solid #4a5c78;
+}
+.sched-slider::after {
+  content:'';position:absolute;top:4px;left:4px;width:16px;height:16px;
+  background:#aab9d1;border-radius:50%;transition:transform .2s,background .2s;
+}
+.sched-toggle input:checked + .sched-slider { background:#1fa3ff;border-color:#1fa3ff }
+.sched-toggle input:checked + .sched-slider::after { transform:translateX(22px);background:#fff }
+</style>
+
+<script>
+async function toggleSchedule(checkbox) {
+  const r = await fetch('{{ url_for("main.weekly_schedule_toggle") }}', { method: 'POST' });
+  const d = await r.json();
+  if (!d.ok) { checkbox.checked = !checkbox.checked; return; }
+  document.getElementById('schedActiveInput').value = d.active ? '1' : '0';
+  checkbox.closest('.card').style.borderColor =
+    d.active ? 'rgba(31,163,255,.3)' : 'var(--line)';
+}
+</script>
+{% endif %}
+
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/weekly_program.js') }}"></script>{% endblock %}

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task chiuso — LogiMetric</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#07111f;--bg-card:#0f1e38;--line:rgba(255,255,255,.08);--text:#edf3fb;--muted:#7a90b0;--primary:#1fa3ff}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+         min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .card{background:var(--bg-card);border:1px solid var(--line);border-radius:16px;
+          padding:40px 32px;text-align:center;max-width:460px;width:100%}
+    .icon{font-size:3rem;margin-bottom:16px}
+    h1{margin:0 0 12px;font-size:1.5rem}
+    p{color:var(--muted);line-height:1.6;margin:0 0 12px}
+    .footer{color:var(--muted);font-size:.78rem;margin-top:24px}
+    a{color:var(--primary)}
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">🔒</div>
+  <h1>Task già chiuso</h1>
+  <p>Il task <strong>#{{ task.id }} — {{ task.title }}</strong> è già nello stato
+     <strong>{{ status_labels.get(task.status, task.status) }}</strong>.</p>
+  <p>Non sono necessari ulteriori aggiornamenti. Grazie.</p>
+  <div class="footer">
+    LogiMetric — <a href="https://www.logimetric.eu">logimetric.eu</a>
+  </div>
+</div>
+</body>
+</html>

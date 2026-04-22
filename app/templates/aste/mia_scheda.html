@@ -1,0 +1,270 @@
+{% extends 'base.html' %}
+{% block title %}La mia scheda — Gestione Aste{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>La mia scheda</h1>
+    <p class="page-subtitle">Riepilogo finanziario e stato dei pagamenti per ogni immobile a cui partecipi.</p>
+  </div>
+  <a href="{{ url_for('aste.index') }}" class="btn btn-outline">← Lista immobili</a>
+</div>
+
+{# ── KPI globali ── #}
+<div class="task-kpi-strip">
+  <div class="kpi-card kpi-blue">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.2f}'.format(tot_pagato).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">Versato da me</div>
+  </div>
+  <div class="kpi-card kpi-yellow">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.2f}'.format(tot_quota).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+    <div class="kpi-label">Mia quota totale</div>
+  </div>
+  {% set saldo_glob = tot_pagato - tot_quota %}
+  <div class="kpi-card {% if saldo_glob > 0.01 %}kpi-green{% elif saldo_glob < -0.01 %}kpi-red{% else %}kpi-green{% endif %}">
+    <div class="kpi-val kpi-val-sm">
+      {% if saldo_glob|abs < 0.01 %}In pari ✓
+      {% elif saldo_glob > 0 %}{{ '{:,.2f}'.format(saldo_glob).replace(',','X').replace('.',',').replace('X','.') }} € da ricevere
+      {% else %}{{ '{:,.2f}'.format(saldo_glob|abs).replace(',','X').replace('.',',').replace('X','.') }} € da versare
+      {% endif %}
+    </div>
+    <div class="kpi-label">Saldo complessivo</div>
+  </div>
+  <div class="kpi-card {% if tot_saldo > 0.01 %}kpi-green{% elif tot_saldo < -0.01 %}kpi-red{% else %}kpi-green{% endif %}">
+    <div class="kpi-val kpi-val-sm">
+      {% if tot_saldo|abs < 0.01 %}Tutto liquidato ✓
+      {% elif tot_saldo > 0 %}{{ '{:,.2f}'.format(tot_saldo).replace(',','X').replace('.',',').replace('X','.') }} € ancora da ricevere
+      {% else %}{{ '{:,.2f}'.format(tot_saldo|abs).replace(',','X').replace('.',',').replace('X','.') }} € ancora da versare
+      {% endif %}
+    </div>
+    <div class="kpi-label">Saldo dopo liquidazioni</div>
+  </div>
+</div>
+
+{% if not rows %}
+<div class="card">
+  <div class="empty-state">
+    <p>Non partecipi ancora a nessun immobile.</p>
+    <p class="muted">Chiedi all'amministratore di aggiungerti come partecipante.</p>
+  </div>
+</div>
+{% else %}
+
+{% for row in rows %}
+{% set h = row.house %}
+<div class="card" style="margin-bottom:16px">
+
+  {# ── Header immobile ── #}
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line)">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+        <a href="{{ url_for('aste.detail', house_id=h.id) }}"
+           style="font-size:1.1rem;font-weight:800;color:var(--text)">{{ h.via }}, {{ h.citta }}</a>
+        <span class="status-badge" style="background:{{ stati_colors[h.stato] }}18;
+              color:{{ stati_colors[h.stato] }};border:1px solid {{ stati_colors[h.stato] }}35;font-size:.72rem">
+          {{ stati[h.stato] }}
+        </span>
+        {% if row.liquidato %}
+        <span class="status-badge" style="background:rgba(61,191,124,.12);color:var(--success);border:1px solid rgba(61,191,124,.3);font-size:.72rem">✓ Liquidato</span>
+        {% endif %}
+      </div>
+      {% if h.data_asta %}
+      <div class="text-muted" style="font-size:.82rem">📅 Asta: {{ h.data_asta.strftime('%d/%m/%Y') }}</div>
+      {% endif %}
+      <div class="text-muted" style="font-size:.82rem">
+        {{ h.n_partecipanti }} partecipanti · quota pro capite:
+        <strong style="color:var(--text)">{{ '{:,.2f}'.format(row.quota).replace(',','X').replace('.',',').replace('X','.') }} €</strong>
+      </div>
+    </div>
+
+    {# KPI box saldi globali per questa casa #}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="saldo-box">
+        <div class="saldo-label">Versato da me</div>
+        <div class="saldo-val">{{ '{:,.2f}'.format(row.pagato).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+      </div>
+      <div class="saldo-box">
+        <div class="saldo-label">Mia quota</div>
+        <div class="saldo-val">{{ '{:,.2f}'.format(row.quota).replace(',','X').replace('.',',').replace('X','.') }} €</div>
+      </div>
+      {% set sd = row.saldo_display %}
+      <div class="saldo-box {% if sd|abs < 0.01 %}saldo-pos{% elif sd > 0 %}saldo-pos{% else %}saldo-neg{% endif %}">
+        <div class="saldo-label">{% if sd|abs < 0.01 %}Pareggio{% elif sd > 0 %}Devo ricevere{% else %}Devo versare{% endif %}</div>
+        <div class="saldo-val">
+          {% if sd|abs < 0.01 %}0,00 €
+          {% else %}{{ '{:,.2f}'.format(sd|abs).replace(',','X').replace('.',',').replace('X','.') }} €{% endif %}
+        </div>
+        {% if row.credito_ricevuto %}<div style="font-size:.68rem;color:var(--success);margin-top:3px">✓ Ricezione confermata</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Dettaglio spese ── #}
+  {% if row.exp_rows %}
+  <div style="margin-bottom:14px">
+    <div class="text-muted" style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">
+      Dettaglio spese
+    </div>
+    <div class="stack-md">
+      {% for er in row.exp_rows %}
+      {% set e = er.expense %}
+      <div style="background:var(--bg-card-alt);border:1px solid
+           {% if er.is_payer and er.ricevuto %}rgba(61,191,124,.3)
+           {% elif not er.is_payer and er.versato %}rgba(61,191,124,.3)
+           {% elif er.is_payer %}rgba(31,163,255,.2)
+           {% else %}rgba(224,92,92,.2){% endif %};
+           border-radius:var(--radius-sm);padding:12px 14px">
+
+        {# Header spesa #}
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="cat-badge" style="background:var(--bg-card);border:1px solid var(--line);font-size:.7rem">
+              {{ er.expense.categoria }}
+            </span>
+            {% if e.descrizione %}
+            <span style="font-weight:600;font-size:.88rem">{{ e.descrizione }}</span>
+            {% endif %}
+            <span class="text-muted" style="font-size:.78rem">{{ e.data.strftime('%d/%m/%Y') if e.data else '' }}</span>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:800;color:var(--primary)">
+              {{ '{:,.2f}'.format(e.importo).replace(',','X').replace('.',',').replace('X','.') }} €
+            </div>
+            <div class="text-muted" style="font-size:.72rem">
+              quota mia: {{ '{:,.2f}'.format(er.quota).replace(',','X').replace('.',',').replace('X','.') }} €
+            </div>
+          </div>
+        </div>
+
+        {# Ruolo: creditore o debitore #}
+        {% if er.is_payer %}
+        {# SONO IL CREDITORE di questa spesa #}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div>
+            <span style="font-size:.78rem;color:var(--success);font-weight:600">✦ Hai pagato tu questa spesa</span>
+            {% if er.debtors_status %}
+            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+              {% for d in er.debtors_status %}
+              <span style="font-size:.75rem;background:var(--bg-card);border:1px solid
+                    {% if d.versato %}rgba(61,191,124,.4){% else %}rgba(224,92,92,.3){% endif %};
+                    border-radius:999px;padding:3px 10px;color:{% if d.versato %}var(--success){% else %}var(--danger){% endif %}">
+                {{ d.user.name }}:
+                {% if d.versato %}✓ versato{% else %}⏳ deve {{ '{:,.2f}'.format(d.quota).replace(',','X').replace('.',',').replace('X','.') }} €{% endif %}
+              </span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          <button onclick="expRicevuto({{ e.id }}, {{ h.id }}, this)"
+                  class="btn btn-sm {% if er.ricevuto %}btn-success{% else %}btn-primary{% endif %}"
+                  id="btn-ric-{{ e.id }}">
+            {% if er.ricevuto %}✓ Ricevuto{% else %}Conferma ricezione{% endif %}
+          </button>
+        </div>
+
+        {% else %}
+        {# SONO IL DEBITORE di questa spesa #}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div>
+            <span style="font-size:.78rem;font-weight:600;
+                  color:{% if er.versato %}var(--success){% else %}var(--danger){% endif %}">
+              {% if er.versato %}✓ Hai versato la tua quota
+              {% else %}⏳ Devi versare {{ '{:,.2f}'.format(er.quota).replace(',','X').replace('.',',').replace('X','.') }} € a
+              {% if er.paid_by %}{{ er.paid_by.name }}{% endif %}
+              {% endif %}
+            </span>
+            {% if er.versato and er.versato_il %}
+            <span class="text-muted" style="font-size:.72rem;margin-left:6px">
+              il {{ er.versato_il.strftime('%d/%m/%Y') }}
+            </span>
+            {% endif %}
+          </div>
+          {% if not er.versato %}
+          <button onclick="expVersato({{ e.id }}, {{ h.id }}, this)"
+                  class="btn btn-sm btn-outline" id="btn-ver-{{ e.id }}">
+            Conferma versamento
+          </button>
+          {% else %}
+          <span class="status-badge" style="background:rgba(61,191,124,.12);color:var(--success);border:1px solid rgba(61,191,124,.3);font-size:.72rem">✓ Versato</span>
+          {% endif %}
+        </div>
+        {% endif %}
+
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Conferma globale (saldo totale casa) ── #}
+  <div style="display:flex;gap:10px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--line)">
+    {% if row.saldo < -0.01 %}
+    <div style="display:flex;align-items:center;gap:10px">
+      <button onclick="toggleVers({{ h.id }}, this)"
+              class="btn btn-sm {% if row.quota_versata %}btn-success{% else %}btn-outline{% endif %}"
+              id="btn-vers-{{ h.id }}">
+        {% if row.quota_versata %}✓ Saldo totale confermato{% else %}Conferma saldo totale versato{% endif %}
+      </button>
+      {% if row.versato_il %}
+      <span class="text-muted" style="font-size:.72rem">il {{ row.versato_il.strftime('%d/%m/%Y') }}</span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if row.saldo > 0.01 %}
+    <div style="display:flex;align-items:center;gap:10px">
+      <button onclick="toggleRic({{ h.id }}, this)"
+              class="btn btn-sm {% if row.credito_ricevuto %}btn-success{% else %}btn-primary{% endif %}"
+              id="btn-ric-glob-{{ h.id }}">
+        {% if row.credito_ricevuto %}✓ Credito totale ricevuto{% else %}Conferma ricezione totale{% endif %}
+      </button>
+      {% if row.ricevuto_il %}
+      <span class="text-muted" style="font-size:.72rem">il {{ row.ricevuto_il.strftime('%d/%m/%Y') }}</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# Stato degli altri (visibile se sono creditore) #}
+    {% if row.saldo > 0.01 %}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span class="text-muted" style="font-size:.75rem">Altri:</span>
+      {% for p in h.participants.all() %}{% if p.user_id != current_user.id %}
+      <span style="font-size:.72rem;background:var(--bg-card-alt);
+                   border:1px solid {% if p.quota_versata %}rgba(61,191,124,.4){% else %}rgba(224,92,92,.3){% endif %};
+                   border-radius:999px;padding:2px 8px;
+                   color:{% if p.quota_versata %}var(--success){% else %}var(--muted){% endif %}">
+        {{ p.user.name }}: {% if p.quota_versata %}✓{% else %}⏳{% endif %}
+      </span>
+      {% endif %}{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endfor %}
+{% endif %}
+
+<script>
+async function expVersato(expId, houseId, btn) {
+  const r = await fetch(`/aste/${houseId}/spese/${expId}/versato`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) location.reload();
+}
+async function expRicevuto(expId, houseId, btn) {
+  const r = await fetch(`/aste/${houseId}/spese/${expId}/ricevuto`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || 'Errore'); return; }
+  location.reload();
+}
+async function toggleVers(houseId, btn) {
+  const r = await fetch(`/aste/${houseId}/conferma-versamento`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) location.reload();
+}
+async function toggleRic(houseId, btn) {
+  const r = await fetch(`/aste/${houseId}/conferma-ricezione`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || 'Errore'); return; }
+  location.reload();
+}
+</script>
+{% endblock %}

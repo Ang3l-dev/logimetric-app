@@ -1,0 +1,250 @@
+{% extends 'base.html' %}
+{% block title %}Gestione Aste — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Gestione Aste</h1>
+    <p class="page-subtitle">Traccia acquisti, spese, guadagni e scadenze per ogni immobile.</p>
+  </div>
+  <div style="display:flex;gap:10px">
+    <a href="{{ url_for('aste.mia_scheda') }}" class="btn btn-outline">👤 La mia scheda</a>
+    <a href="{{ url_for('aste.export_excel') }}" class="btn btn-outline">⬇ Export Excel</a>
+    <a href="{{ url_for('aste.new_house') }}" class="btn btn-primary">+ Nuovo immobile</a>
+  </div>
+</div>
+
+{# ── KPI strip ── #}
+<div class="task-kpi-strip">
+  <div class="kpi-card">
+    <div class="kpi-val">{{ houses|length }}</div>
+    <div class="kpi-label">Immobili totali</div>
+  </div>
+  <div class="kpi-card kpi-blue">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.0f}'.format(kpi.tot_aggiudicazione).replace(',','.') }} €</div>
+    <div class="kpi-label">Tot. aggiudicato</div>
+  </div>
+  <div class="kpi-card kpi-yellow">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.0f}'.format(kpi.tot_spese).replace(',','.') }} €</div>
+    <div class="kpi-label">Tot. spese access.</div>
+  </div>
+  <div class="kpi-card" style="border-color:rgba(168,85,247,.25)">
+    <div class="kpi-val kpi-val-sm" style="color:#a855f7">{{ '{:,.0f}'.format(kpi.stima_incassi).replace(',','.') }} €</div>
+    <div class="kpi-label">Stima incassi</div>
+  </div>
+  <div class="kpi-card {% if kpi.guadagno_stimato >= 0 %}kpi-green{% else %}kpi-red{% endif %}">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.0f}'.format(kpi.guadagno_stimato).replace(',','.') }} €</div>
+    <div class="kpi-label">Guadagno stimato</div>
+  </div>
+  <div class="kpi-card kpi-green">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.0f}'.format(kpi.ricavo_consuntivo).replace(',','.') }} €</div>
+    <div class="kpi-label">Ricavo consuntivo</div>
+  </div>
+  <div class="kpi-card {% if kpi.guadagno_reale >= 0 %}kpi-green{% else %}kpi-red{% endif %}">
+    <div class="kpi-val kpi-val-sm">{{ '{:,.0f}'.format(kpi.guadagno_reale).replace(',','.') }} €</div>
+    <div class="kpi-label">Guadagno reale</div>
+  </div>
+</div>
+
+{# ── Contatori stato ── #}
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+  {% for s_key, s_lbl in stati.items() %}{% if kpi.per_stato[s_key] %}
+  <span class="status-badge" style="background:{{ stati_colors[s_key] }}18;
+        color:{{ stati_colors[s_key] }};border:1px solid {{ stati_colors[s_key] }}35;padding:5px 14px">
+    {{ s_lbl }}: <strong>{{ kpi.per_stato[s_key] }}</strong>
+  </span>{% endif %}{% endfor %}
+  {% if kpi.urgenti %}<span class="status-badge" style="background:rgba(224,92,92,.12);color:var(--danger);border:1px solid rgba(224,92,92,.3);padding:5px 14px">⚠ {{ kpi.urgenti }} scadenz{{ 'a' if kpi.urgenti==1 else 'e' }} urgenti</span>{% endif %}
+</div>
+
+{% if houses %}
+<div class="card" style="padding:0;overflow:hidden">
+  <div class="table-wrap">
+    <table class="data-table aste-grid">
+      <thead>
+        <tr>
+          <th style="text-align:left">Immobile</th>
+          <th style="text-align:left">Data Asta</th>
+          <th style="text-align:left">Stato</th>
+          <th style="text-align:right;padding-right:16px">Aggiudicazione</th>
+          <th style="text-align:right;padding-right:16px">Anticipo</th>
+          <th style="text-align:right;padding-right:16px">Spese Acc.</th>
+          <th style="text-align:right;padding-right:16px">Costo Totale</th>
+          <th style="text-align:right;padding-right:16px">Stima Vendita</th>
+          <th style="text-align:right;padding-right:16px">G. Stimato</th>
+          <th style="text-align:right;padding-right:16px">G. Reale</th>
+          <th style="text-align:center">Azioni</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in houses %}
+        {% set urgenti = h.scadenze_urgenti %}
+        <tr id="row-{{ h.id }}" class="{% if urgenti %}row-alert{% endif %}">
+
+          <td>
+            <div style="min-width:170px">
+              <a href="{{ url_for('aste.detail', house_id=h.id) }}" style="font-weight:700;color:var(--text)">{{ h.via }}</a>
+              <div style="font-size:.78rem;color:var(--muted)">{{ h.citta }}{% if h.mq %} · {{ h.mq|int }} mq{% endif %}{% if h.garage %} · 🚗{% endif %}</div>
+              {% if urgenti %}<div style="font-size:.72rem;color:var(--danger)">⚠ {{ urgenti|length }} scad. urgenti</div>{% endif %}
+              <div style="margin-top:3px;display:flex;gap:2px">
+                {% for p in h.participants.all() %}<span class="user-avatar" style="width:20px;height:20px;font-size:.6rem" title="{{ p.user.name }}">{{ p.user.name[0].upper() }}</span>{% endfor %}
+              </div>
+            </div>
+          </td>
+
+          <td style="text-align:left">
+            <span class="editable" data-house="{{ h.id }}" data-field="data_asta" data-type="date"
+                  {% if h.data_asta %}data-iso="{{ h.data_asta.isoformat() }}"{% endif %}>
+              {{ h.data_asta.strftime('%d/%m/%Y') if h.data_asta else '—' }}
+            </span>
+          </td>
+
+          <td>
+            <select class="input input-inline stato-select" data-house="{{ h.id }}" data-field="stato"
+                    style="border-color:{{ stati_colors[h.stato] }}40;color:{{ stati_colors[h.stato] }};background:{{ stati_colors[h.stato] }}12">
+              {% for s_key, s_lbl in stati.items() %}<option value="{{ s_key }}" {% if h.stato==s_key %}selected{% endif %}>{{ s_lbl }}</option>{% endfor %}
+            </select>
+          </td>
+
+          <td style="text-align:right;padding-right:16px">
+            <span class="editable" data-house="{{ h.id }}" data-field="prezzo_aggiudicazione" data-type="float">
+              {{ '{:,.0f}'.format(h.prezzo_aggiudicazione or 0).replace(',','.') }} €
+            </span>
+          </td>
+
+          <td style="text-align:right;padding-right:16px">
+            <span class="editable" data-house="{{ h.id }}" data-field="assegno_anticipo" data-type="float">
+              {{ '{:,.0f}'.format(h.assegno_anticipo or 0).replace(',','.') }} €
+            </span>
+          </td>
+
+          <td style="text-align:right;padding-right:16px" id="spese-{{ h.id }}">
+            {{ '{:,.0f}'.format(h.spese_totali).replace(',','.') }} €
+          </td>
+
+          <td style="text-align:right;padding-right:16px" id="costo-{{ h.id }}">
+            {{ '{:,.0f}'.format(h.costo_totale).replace(',','.') }} €
+          </td>
+
+          <td style="text-align:right;padding-right:16px">
+            <span class="editable" data-house="{{ h.id }}" data-field="stima_vendita" data-type="float">
+              {{ '{:,.0f}'.format(h.stima_vendita or 0).replace(',','.') }} €
+            </span>
+          </td>
+
+          <td style="text-align:right;padding-right:16px" id="g-stimato-{{ h.id }}"
+              class="{% if h.guadagno_stimato >= 0 %}td-pos{% else %}td-neg{% endif %}">
+            {{ '{:,.0f}'.format(h.guadagno_stimato).replace(',','.') }} €
+          </td>
+
+          <td style="text-align:right;padding-right:16px" id="g-reale-{{ h.id }}"
+              class="{% if h.guadagno_reale >= 0 %}td-pos{% else %}td-neg{% endif %}">
+            {{ '{:,.0f}'.format(h.guadagno_reale).replace(',','.') }} €
+          </td>
+
+          <td style="text-align:center">
+            <div style="display:flex;gap:6px;justify-content:center">
+              <a href="{{ url_for('aste.detail', house_id=h.id) }}" class="btn btn-outline btn-sm">Dettaglio</a>
+              <a href="{{ url_for('aste.edit_house', house_id=h.id) }}" class="btn btn-outline btn-sm">✎</a>
+              <form method="post" action="{{ url_for('aste.delete_house', house_id=h.id) }}" style="display:inline"
+                    onsubmit="return confirm('Eliminare {{ h.via|e }}, {{ h.citta|e }}?')">
+                <button class="btn btn-danger btn-sm">✕</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card"><div class="empty-state">
+  <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="40" height="32" rx="3"/><path d="M4 36l8-12 8 6 8-10 8 4 8-10"/></svg>
+  <p>Nessun immobile registrato.</p>
+  <a href="{{ url_for('aste.new_house') }}" class="btn btn-primary" style="margin-top:8px">+ Aggiungi il primo immobile</a>
+</div></div>
+{% endif %}
+
+<script>
+const STATI_COLORS = {{ stati_colors | tojson }};
+
+// ── Editable cells ─────────────────────────────────────────────────────────
+function bindEditables() {
+  document.querySelectorAll('.editable').forEach(el => {
+    if (el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.style.cursor = 'pointer';
+    el.title = 'Clicca per modificare';
+    el.addEventListener('click', handleEdit);
+  });
+}
+
+async function handleEdit() {
+  const el    = this;
+  const house = el.dataset.house;
+  const field = el.dataset.field;
+  const type  = el.dataset.type;
+
+  const input = document.createElement('input');
+  input.type  = type === 'float' ? 'number' : (type === 'date' ? 'date' : 'text');
+  if (type === 'float') { input.step = '1'; input.min = '0'; input.value = parseFloat((el.textContent.replace(/[€\s\.]/g,'').replace(',','.')) || 0); }
+  else if (type === 'date') { input.value = el.dataset.iso || ''; }
+  else { input.value = el.textContent.trim(); }
+  input.className = 'input input-inline';
+  input.style.width = type === 'date' ? '140px' : '120px';
+  el.replaceWith(input);
+  input.focus();
+
+  const save = async () => {
+    const val = input.value;
+    const span = document.createElement('span');
+    span.className = 'editable';
+    span.dataset.house = house;
+    span.dataset.field = field;
+    span.dataset.type  = type;
+
+    try {
+      const r = await fetch(`/aste/${house}/inline`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({field, value: val}),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        const upd = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+        upd(`spese-${house}`, d.spese_totali);
+        upd(`costo-${house}`, d.costo_totale);
+        const gs = document.getElementById(`g-stimato-${house}`);
+        if (gs) { gs.textContent = d.guadagno_stimato; gs.className = d.guadagno_stimato.includes('-') ? 'td-neg' : 'td-pos'; }
+        const gr = document.getElementById(`g-reale-${house}`);
+        if (gr) { gr.textContent = d.guadagno_reale; gr.className = d.guadagno_reale.includes('-') ? 'td-neg' : 'td-pos'; }
+      }
+    } catch(e) {}
+
+    if (type === 'date' && val) {
+      const [y,m,d2] = val.split('-');
+      span.textContent = `${d2}/${m}/${y}`;
+      span.dataset.iso = val;
+    } else if (type === 'float') {
+      const v = parseFloat(val) || 0;
+      span.textContent = v.toLocaleString('it-IT', {maximumFractionDigits:0}) + ' €';
+    } else { span.textContent = val; }
+
+    input.replaceWith(span);
+    span.style.cursor = 'pointer'; span.title = 'Clicca per modificare';
+    span.addEventListener('click', handleEdit);
+  };
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();input.blur();} if(e.key==='Escape') input.blur(); });
+}
+
+document.querySelectorAll('.stato-select').forEach(sel => {
+  sel.addEventListener('change', async function() {
+    const h = this.dataset.house; const c = STATI_COLORS[this.value]||'#4a5c78';
+    this.style.borderColor = c+'40'; this.style.color = c; this.style.background = c+'12';
+    await fetch(`/aste/${h}/inline`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({field:'stato',value:this.value})});
+  });
+});
+
+bindEditables();
+</script>
+{% endblock %}

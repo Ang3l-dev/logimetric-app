@@ -1,0 +1,28 @@
+{
+  "name": "LogiMetric",
+  "short_name": "LogiMetric",
+  "description": "Dati, processi, performance.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "scope": "/",
+  "lang": "it",
+  "icons": [
+    {
+      "src": "/static/assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false
+}

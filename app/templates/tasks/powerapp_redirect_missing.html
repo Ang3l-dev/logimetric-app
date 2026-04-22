@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Power App non configurata — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Power App non configurata</h1>
+    <p class="page-subtitle">Il collegamento al task utente non è attivo sul server.</p>
+  </div>
+</div>
+
+<div class="card" style="max-width:760px">
+  <h2 style="margin-top:0">Task #{{ task.id }} — {{ task.title }}</h2>
+  <p style="color:var(--muted);line-height:1.7">
+    Il link email deve reindirizzare alla Power App utente, ma l'URL dell'app non è configurato.
+  </p>
+  <div style="margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:14px;background:rgba(31,163,255,.05)">
+    <div class="detail-label" style="margin-bottom:8px">Configurazione richiesta</div>
+    <code>POWERAPP_URL</code>
+    <div class="text-muted" style="margin-top:8px">
+      Imposta nelle variabili ambiente l'URL Play della Power App. Il sistema aggiungerà automaticamente
+      il parametro task_id per aprire il task corretto.
+    </div>
+  </div>
+  <div style="margin-top:18px">
+    <a href="{{ url_for('tasks.board') }}" class="btn btn-outline">← Torna alla board</a>
+  </div>
+</div>
+{% endblock %}

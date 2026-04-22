@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}Rubrica Contatti — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Rubrica Contatti</h1>
+    <p class="page-subtitle">Gestisci i destinatari disponibili nei moduli di invio email.</p>
+  </div>
+  <a href="{{ url_for('admin.users') }}" class="btn btn-outline">← Utenti</a>
+</div>
+
+<div class="card" style="max-width:640px">
+  <div class="card-header compact"><h2 id="formTitle">Aggiungi contatto</h2></div>
+  <form method="post" action="{{ url_for('admin.contacts_save') }}" id="contactForm">
+    <input type="hidden" name="contact_id" id="contactId" value="">
+    <div class="form-grid cols-2">
+      <div class="field">
+        <label for="cName">Nome *</label>
+        <input id="cName" name="name" type="text" class="input" required placeholder="Mario Rossi">
+      </div>
+      <div class="field">
+        <label for="cEmail">Email *</label>
+        <input id="cEmail" name="email" type="email" class="input" required placeholder="mario@azienda.it">
+      </div>
+      <div class="field field-span-2">
+        <label for="cNotes">Note <span class="label-hint">(opzionale)</span></label>
+        <input id="cNotes" name="notes" type="text" class="input" placeholder="Ufficio HR, responsabile trasferte…">
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:20px">
+      <button type="submit" class="btn btn-primary">Salva contatto</button>
+      <button type="button" class="btn btn-outline" onclick="resetForm()">Annulla</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div><h2>Contatti in rubrica <span class="badge-count">{{ contacts|length }}</span></h2>
+      <p>I contatti attivi appaiono nel menu destinatario dei moduli.</p>
+    </div>
+  </div>
+
+  {% if contacts %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>Nome</th><th>Email</th><th>Note</th><th>Stato</th><th class="th-actions">Azioni</th></tr>
+      </thead>
+      <tbody>
+        {% for c in contacts %}
+        <tr>
+          <td><strong>{{ c.name }}</strong></td>
+          <td class="text-muted">{{ c.email }}</td>
+          <td class="text-muted">{{ c.notes or '—' }}</td>
+          <td>
+            <button onclick="toggleContact({{ c.id }}, this)"
+                    class="btn btn-sm {{ 'btn-success' if c.is_active else 'btn-outline' }}">
+              {{ 'Attivo' if c.is_active else 'Disattivo' }}
+            </button>
+          </td>
+          <td class="td-actions">
+            <button class="btn btn-outline btn-sm"
+                    onclick="editContact({{ c.id }}, '{{ c.name|e }}', '{{ c.email|e }}', '{{ c.notes|e }}')">
+              Modifica
+            </button>
+            <form method="post" action="{{ url_for('admin.contact_delete', contact_id=c.id) }}"
+                  style="display:inline"
+                  onsubmit="return confirm('Eliminare {{ c.name|e }}?')">
+              <button class="btn btn-danger btn-sm">Elimina</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="24" cy="18" r="8"/><path d="M8 42c0-8.8 7.2-16 16-16s16 7.2 16 16"/>
+    </svg>
+    <p>Nessun contatto in rubrica.</p>
+    <p class="muted">Aggiungi il primo contatto con il modulo qui sopra.</p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function editContact(id, name, email, notes) {
+  document.getElementById('contactId').value = id;
+  document.getElementById('cName').value     = name;
+  document.getElementById('cEmail').value    = email;
+  document.getElementById('cNotes').value    = notes;
+  document.getElementById('formTitle').textContent = 'Modifica contatto';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function resetForm() {
+  document.getElementById('contactForm').reset();
+  document.getElementById('contactId').value = '';
+  document.getElementById('formTitle').textContent = 'Aggiungi contatto';
+}
+async function toggleContact(id, btn) {
+  const r = await fetch(`/admin/rubrica/${id}/toggle`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) {
+    btn.textContent  = d.is_active ? 'Attivo' : 'Disattivo';
+    btn.className    = `btn btn-sm ${d.is_active ? 'btn-success' : 'btn-outline'}`;
+  }
+}
+</script>
+{% endblock %}

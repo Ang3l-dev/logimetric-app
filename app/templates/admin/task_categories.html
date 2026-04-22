@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+{% block title %}Categorie Task — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Categorie Task</h1>
+    <p class="page-subtitle">Gestisci le categorie, i colori e i destinatari email per ogni tipo di task.</p>
+  </div>
+  <a href="{{ url_for('admin.users') }}" class="btn btn-outline">← Admin</a>
+</div>
+
+<div class="card" style="max-width:680px">
+  <div class="card-header compact"><h2 id="formTitle">Aggiungi categoria</h2></div>
+  <form method="post" action="{{ url_for('admin.task_categories_save') }}" id="catForm">
+    <input type="hidden" name="cat_id" id="catId" value="">
+    <div class="form-grid cols-2">
+
+      <div class="field">
+        <label for="catName">Nome *</label>
+        <input id="catName" name="name" type="text" class="input" required
+               placeholder="Es. Task Produzione">
+      </div>
+      <div class="field">
+        <label for="catColor">Colore</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="catColor" name="color" type="color" value="#1fa3ff"
+                 style="width:44px;height:38px;border:1px solid var(--line);
+                        border-radius:var(--radius-sm);background:var(--bg-soft);
+                        cursor:pointer;padding:2px">
+          <span id="catColorVal" style="font-size:.85rem;color:var(--muted)">#1fa3ff</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="catPos">Posizione <span class="label-hint">(ordine nel menu)</span></label>
+        <input id="catPos" name="position" type="number" class="input" value="0" min="0">
+      </div>
+      <div class="field" style="align-self:center;padding-top:20px">
+        <label class="checkbox-label">
+          <input type="checkbox" name="notify_on_create" id="catNotify">
+          Invia email alla creazione del task
+        </label>
+      </div>
+
+      <div class="field field-span-2">
+        <label for="catEmails">
+          Email destinatari
+          <span class="label-hint">(una per riga o separate da virgola)</span>
+        </label>
+        <textarea id="catEmails" name="email_recipients" class="input textarea" rows="3"
+                  placeholder="responsabile@azienda.it&#10;capo.magazzino@azienda.it"></textarea>
+        <div class="text-muted" style="font-size:.78rem;margin-top:4px">
+          Questi riceveranno l'email quando viene creato un task di questa categoria
+          (se l'opzione sopra è attiva).
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:20px">
+      <button type="submit" class="btn btn-primary">Salva categoria</button>
+      <button type="button" class="btn btn-outline" onclick="resetForm()">Annulla</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h2>Categorie configurate</h2>
+      <p>Le categorie con "Notifica" attiva inviano email ai destinatari alla creazione del task.</p>
+    </div>
+  </div>
+
+  {% if categories %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Pos.</th><th>Categoria</th><th>Destinatari</th><th>Notifica</th>
+          <th>Task</th><th class="th-actions">Azioni</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in categories %}
+        <tr>
+          <td class="text-muted">{{ c.position }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:14px;height:14px;border-radius:50%;
+                           background:{{ c.color }};flex-shrink:0;display:inline-block"></span>
+              <strong>{{ c.name }}</strong>
+            </div>
+          </td>
+          <td class="text-muted" style="font-size:.82rem">
+            {% set recip = c.get_recipients() %}
+            {% if recip %}
+              {{ recip|join(', ') }}
+            {% else %}
+              <span style="color:var(--muted-soft)">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if c.notify_on_create %}
+            <span class="role-badge role-admin">✓ Attiva</span>
+            {% else %}
+            <span class="role-badge role-user">Off</span>
+            {% endif %}
+          </td>
+          <td class="text-muted">{{ c.tasks.count() }}</td>
+          <td class="td-actions">
+            <button class="btn btn-outline btn-sm"
+                    type="button"
+                    data-cat-id="{{ c.id }}"
+                    data-cat-name="{{ c.name }}"
+                    data-cat-color="{{ c.color }}"
+                    data-cat-position="{{ c.position }}"
+                    data-cat-notify="{{ 1 if c.notify_on_create else 0 }}"
+                    data-cat-recipients='{{ c.get_recipients()|tojson }}'
+                    onclick="editCatFromButton(this)">
+              Modifica
+            </button>
+            <form method="post"
+                  action="{{ url_for('admin.task_category_delete', cat_id=c.id) }}"
+                  style="display:inline"
+                  onsubmit="return confirmDeleteCategory('{{ c.name|replace("'", "&#39;") }}', {{ c.tasks.count() }})">
+              <button class="btn btn-danger btn-sm">Elimina</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>Nessuna categoria. Aggiungine una con il modulo sopra.</p>
+  </div>
+  {% endif %}
+</div>
+
+
+<script>
+const catColor = document.getElementById('catColor');
+if (catColor) {
+  catColor.addEventListener('input', function() {
+    document.getElementById('catColorVal').textContent = this.value;
+  });
+}
+
+function editCatFromButton(button) {
+  const recipientsRaw = button.dataset.catRecipients || '[]';
+  let recipients = [];
+  try { recipients = JSON.parse(recipientsRaw); } catch (_) { recipients = []; }
+
+  document.getElementById('catId').value = button.dataset.catId || '';
+  document.getElementById('catName').value = button.dataset.catName || '';
+  document.getElementById('catColor').value = button.dataset.catColor || '#1fa3ff';
+  document.getElementById('catColorVal').textContent = button.dataset.catColor || '#1fa3ff';
+  document.getElementById('catPos').value = button.dataset.catPosition || 0;
+  document.getElementById('catNotify').checked = (button.dataset.catNotify === '1');
+  document.getElementById('catEmails').value = Array.isArray(recipients) ? recipients.join('
+') : '';
+  document.getElementById('formTitle').textContent = 'Modifica categoria';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetForm() {
+  document.getElementById('catForm').reset();
+  document.getElementById('catId').value = '';
+  document.getElementById('catColor').value = '#1fa3ff';
+  document.getElementById('catColorVal').textContent = '#1fa3ff';
+  document.getElementById('formTitle').textContent = 'Aggiungi categoria';
+}
+
+function confirmDeleteCategory(name, taskCount) {
+  if (!taskCount) {
+    return confirm(`Eliminare la categoria "${name}"?`);
+  }
+  return confirm(
+    `Eliminare la categoria "${name}"?
+
+` +
+    `Task collegati: ${taskCount}.
+` +
+    `I task aperti verranno riallineati, i destinatari rimossi e le percentuali ricalcolate. ` +
+    `I task Completato/Annullato resteranno storicizzati.`
+  );
+}
+</script>
+
+{% endblock %}

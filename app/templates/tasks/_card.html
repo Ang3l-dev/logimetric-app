@@ -1,0 +1,42 @@
+<div class="task-card" draggable="true"
+     data-task-id="{{ task.id }}"
+     data-status="{{ task.status }}"
+     data-href="{{ url_for('tasks.detail', task_id=task.id) }}"
+     role="button"
+     tabindex="0"
+     aria-label="Apri task {{ task.title }}">
+
+  <div class="task-card-top">
+    <span class="cat-badge" style="background:{{ task.category.color }}20;
+          color:{{ task.category.color }};border:1px solid {{ task.category.color }}40;font-size:.7rem">
+      {{ task.category.name }}
+    </span>
+    <span class="prio-dot" style="background:{{ priority_colors[task.priority] }}"
+          title="{{ priority_labels[task.priority] }}"></span>
+  </div>
+
+  <div class="task-card-title" title="{{ task.title }}">
+    {{ task.title }}
+  </div>
+
+  <div class="task-card-footer">
+    {% if task.due_date %}
+    <span class="task-card-due {% if task.is_overdue %}due-overdue{% elif task.due_soon %}due-soon{% endif %}">
+      {% if task.is_overdue %}⚠ {% endif %}
+      {{ task.due_date.strftime('%d/%m') }}
+    </span>
+    {% endif %}
+    {% set pct = task.progress_percent %}
+    {% if pct is not none %}
+    <span class="task-card-progress
+          {%- if pct == 0 %} progress-zero
+          {%- elif pct < 100 %} progress-partial
+          {%- else %} progress-full{% endif %}"
+          title="{{ pct }}% dei destinatari hanno avanzato lo stato">
+      {{ pct }}%
+    </span>
+    {% endif %}
+    <a href="{{ url_for('tasks.edit_task', task_id=task.id) }}"
+       class="task-card-edit" title="Modifica">✎</a>
+  </div>
+</div>

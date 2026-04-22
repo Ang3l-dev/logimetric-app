@@ -1,0 +1,314 @@
+{% extends 'base.html' %}
+{% block title %}Task #{{ task.id }} — LogiMetric
+
+<div class="card" style="max-width:720px;margin-top:0">
+  <div class="card-header compact">
+    <h2>Storico aggiornamenti</h2>
+    <p>Tracciabilità completa di risposte, cambi stato e note operative. Il richiedente riceve email automatiche sugli aggiornamenti.</p>
+  </div>
+  {% if task.events %}
+  <div style="display:flex;flex-direction:column;gap:10px">
+    {% for ev in task.events|reverse %}
+    <div style="padding:12px 14px;background:var(--bg-card-alt);border:1px solid var(--line);border-radius:var(--radius-sm)">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+        <div style="font-weight:600;color:var(--text)">
+          {% if ev.event_type == 'created' %}Task creato
+          {% elif ev.event_type == 'status_changed' %}Cambio stato
+          {% elif ev.event_type == 'external_reply' %}Risposta / nota operativa
+          {% elif ev.event_type == 'category_deleted' %}Categoria rimossa
+          {% else %}{{ ev.event_type }}{% endif %}
+        </div>
+        <div class="text-muted" style="font-size:.78rem">{{ ev.created_at.strftime('%d/%m/%Y %H:%M') if ev.created_at else '—' }}</div>
+      </div>
+      <div class="text-muted" style="font-size:.8rem;margin-top:4px">
+        {{ ev.actor_name or ev.actor_email or ev.source or 'Sistema' }}
+        {% if ev.old_status or ev.new_status %}
+          · {{ status_labels.get(ev.old_status, ev.old_status) if ev.old_status else '—' }} → {{ status_labels.get(ev.new_status, ev.new_status) if ev.new_status else '—' }}
+        {% endif %}
+      </div>
+      {% if ev.note %}
+      <div style="margin-top:8px;color:var(--muted);white-space:pre-wrap">{{ ev.note }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted">Nessun aggiornamento tracciato.</p>
+  {% endif %}
+</div>
+
+{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>Task #{{ task.id }}</h1>
+    <p class="page-subtitle">{{ task.category.name }} — creato il {{ task.created_at.strftime('%d/%m/%Y') }}</p>
+  </div>
+  <div style="display:flex;gap:10px">
+    <a href="{{ url_for('tasks.edit_task', task_id=task.id) }}" class="btn btn-primary">✎ Modifica</a>
+    <a href="{{ url_for('tasks.board') }}" class="btn btn-outline">← Board</a>
+  </div>
+</div>
+
+<div class="card" style="max-width:720px">
+  <h2 style="margin:0 0 16px;font-size:1.4rem">{{ task.title }}</h2>
+
+  <div class="detail-badges">
+    <span class="cat-badge" style="background:{{ task.category.color }}20;
+          color:{{ task.category.color }};border:1px solid {{ task.category.color }}40">
+      {{ task.category.name }}
+    </span>
+    <span class="prio-badge" style="background:{{ priority_colors[task.priority] }}20;
+          color:{{ priority_colors[task.priority] }}">
+      {{ priority_labels[task.priority] }}
+    </span>
+    <span class="status-badge" style="background:{{ status_colors[task.status] }}20;
+          color:{{ status_colors[task.status] }}">
+      {{ status_labels[task.status] }}
+    </span>
+    {% if task.is_overdue %}
+    <span class="status-badge" style="background:rgba(224,92,92,.15);color:#e05c5c">⚠ Scaduto</span>
+    {% endif %}
+    {# Badge % progress se multi-destinatario #}
+    {% set pct = task.progress_percent %}
+    {% if pct is not none %}
+    <span class="task-card-progress
+          {%- if pct == 0 %} progress-zero
+          {%- elif pct < 100 %} progress-partial
+          {%- else %} progress-full{% endif %}"
+          style="font-size:.8rem;padding:4px 12px">
+      {{ pct }}% avanzati
+    </span>
+    {% endif %}
+  </div>
+
+  <div class="detail-grid">
+    <div class="detail-item">
+      <div class="detail-label">Data inizio</div>
+      <div class="detail-val">{{ task.start_date.strftime('%d/%m/%Y') if task.start_date else '—' }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Scadenza</div>
+      <div class="detail-val {% if task.is_overdue %}text-danger{% elif task.due_soon %}text-warn{% endif %}">
+        {{ task.due_date.strftime('%d/%m/%Y') if task.due_date else '—' }}
+      </div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Creato da</div>
+      <div class="detail-val">{{ task.created_by_name or task.created_by_email or '—' }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Chiusura</div>
+      <div class="detail-val">
+        {% if task.completed_at %}
+          {{ task.completed_at.strftime('%d/%m/%Y %H:%M') }}{% if task.completed_by_name %} · {{ task.completed_by_name }}{% endif %}
+        {% else %}—{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if task.description %}
+  <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--line)">
+    <div class="detail-label" style="margin-bottom:8px">Descrizione</div>
+    <div style="color:var(--muted);line-height:1.7;white-space:pre-wrap">{{ task.description }}</div>
+  </div>
+  {% endif %}
+
+  {# Cambio stato rapido #}
+  <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--line)">
+    <div class="detail-label" style="margin-bottom:10px">Cambia stato</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      {% for k, v in status_labels.items() %}
+      <button onclick="changeStatus('{{ k }}')"
+              class="btn btn-sm {% if task.status == k %}btn-primary{% else %}btn-outline{% endif %}"
+              id="statusBtn-{{ k }}" style="border-color:{{ status_colors[k] }}40">
+        {{ v }}
+      </button>
+      {% endfor %}
+    </div>
+    <p class="text-muted" style="font-size:.78rem;margin-top:8px">
+      Il cambio manuale dell'admin sovrascrive lo stato aggregato dei destinatari.
+    </p>
+  </div>
+
+  {# Token Power Automate #}
+  <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--line)">
+    <div class="detail-label" style="margin-bottom:6px">Token Power Automate</div>
+    <code style="font-size:.8rem;color:#7cc7ff;user-select:all">{{ task.external_token }}</code>
+    <div class="text-muted" style="font-size:.78rem;margin-top:4px">
+      Endpoint: <code>/tasks/api/{{ task.external_token }}/update</code>
+    </div>
+  </div>
+</div>
+
+{# ── Risposte per destinatario ── #}
+{% set recipients = task.category.get_recipients() %}
+{% if recipients %}
+<div class="card" style="max-width:720px;margin-top:0">
+  <div class="card-header compact">
+    <h2>Stato per destinatario</h2>
+    <p>Ogni email riceve il task in modo indipendente — il task avanza quando tutti raggiungono lo stesso stato.</p>
+  </div>
+
+  {% set responses_map = {} %}
+  {% for r in task.recipient_responses.all() %}
+    {% if responses_map.update({(r.recipient_email or '').strip().lower(): r}) %}{% endif %}
+  {% endfor %}
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    {% for email in recipients %}
+    {% set normalized_email = (email or '').strip().lower() %}
+    {% set resp = responses_map.get(normalized_email) %}
+    {% set resp_status = resp.status if resp else 'da_fare' %}
+    {% set resp_color = status_colors.get(resp_status, '#4a5c78') %}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;
+                padding:12px 14px;background:var(--bg-card-alt);border:1px solid var(--line);
+                border-radius:var(--radius-sm);flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:180px">
+        <span class="user-avatar" style="width:30px;height:30px;font-size:.8rem;flex-shrink:0">
+          {{ email[0].upper() }}
+        </span>
+        <div>
+          <div style="font-weight:600;font-size:.88rem;color:var(--text)">{{ email }}</div>
+          {% if resp %}
+          <div style="font-size:.75rem;color:var(--muted);margin-top:2px">
+            Aggiornato {{ resp.updated_at.strftime('%d/%m %H:%M') if resp.updated_at else '' }}
+            {% if resp.replied_by %} · da <strong>{{ resp.replied_by }}</strong>{% endif %}
+          </div>
+          {% if resp.note %}
+          <div style="font-size:.78rem;color:var(--muted);margin-top:4px;font-style:italic">
+            "{{ resp.note[:120] }}{% if resp.note|length > 120 %}…{% endif %}"
+          </div>
+          {% endif %}
+          {% else %}
+          <div style="font-size:.75rem;color:var(--muted);margin-top:2px">Nessuna risposta ancora</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {# Badge stato individuale #}
+      <span class="status-badge" style="background:{{ resp_color }}18;
+            color:{{ resp_color }};border:1px solid {{ resp_color }}35;
+            white-space:nowrap;font-size:.8rem;padding:5px 14px">
+        {% if not resp %}
+        ⏳ In attesa
+        {% else %}
+        {{ status_labels.get(resp_status, resp_status) }}
+        {% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if recipients|length > 1 %}
+  {# Barra progresso visiva #}
+  {% set n_advanced = namespace(count=0) %}
+  {% set resp_all = task.recipient_responses.all() %}
+  {% set status_order = ['da_fare','in_corso','in_attesa','completato','annullato'] %}
+  {% set curr_idx = status_order.index(task.status) if task.status in status_order else 0 %}
+  {% for r in resp_all %}
+    {% set r_idx = status_order.index(r.status) if r.status in status_order else 0 %}
+    {% if r_idx > curr_idx %}{% set n_advanced.count = n_advanced.count + 1 %}{% endif %}
+  {% endfor %}
+  {% set pct_bar = (n_advanced.count / recipients|length * 100)|round|int %}
+
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="text-muted" style="font-size:.8rem">Avanzamento verso prossimo stato</span>
+      <span style="font-size:.8rem;font-weight:700;
+            color:{% if pct_bar == 0 %}var(--muted){% elif pct_bar < 100 %}#f5a623{% else %}var(--success){% endif %}">
+        {{ n_advanced.count }}/{{ recipients|length }} ({{ pct_bar }}%)
+      </span>
+    </div>
+    <div style="height:6px;background:var(--bg-soft);border-radius:999px;overflow:hidden">
+      <div style="height:100%;width:{{ pct_bar }}%;border-radius:999px;transition:width .4s;
+                  background:{% if pct_bar < 100 %}#f5a623{% else %}var(--success){% endif %}">
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── Log eventi ── #}
+{% if task.events %}
+<div class="card" style="max-width:720px;margin-top:0">
+  <div class="card-header compact"><h2>Storico eventi</h2></div>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    {% for ev in task.events|reverse %}
+    <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;
+                border-bottom:1px solid var(--line-soft)">
+      <div style="flex-shrink:0;font-size:.72rem;color:var(--muted);white-space:nowrap;padding-top:2px">
+        {{ ev.created_at.strftime('%d/%m %H:%M') }}
+      </div>
+      <div style="flex:1">
+        <span class="cat-badge" style="font-size:.68rem;background:var(--bg-card);border:1px solid var(--line)">
+          {{ ev.event_type }}
+        </span>
+        {% if ev.old_status and ev.new_status and ev.old_status != ev.new_status %}
+        <span style="font-size:.78rem;color:var(--muted);margin:0 4px">
+          {{ status_labels.get(ev.old_status, ev.old_status) }}
+          → <strong style="color:var(--text)">{{ status_labels.get(ev.new_status, ev.new_status) }}</strong>
+        </span>
+        {% endif %}
+        {% if ev.note %}
+        <div style="font-size:.78rem;color:var(--muted);margin-top:3px">{{ ev.note }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+async function changeStatus(newStatus) {
+  const r = await fetch('/tasks/{{ task.id }}/status', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: newStatus}),
+  });
+  if (r.ok) location.reload();
+}
+</script>
+
+
+<div class="card" style="max-width:720px;margin-top:0">
+  <div class="card-header compact">
+    <h2>Storico aggiornamenti</h2>
+    <p>Tracciabilità completa di risposte, cambi stato e note operative. Il richiedente riceve email automatiche sugli aggiornamenti.</p>
+  </div>
+  {% if task.events %}
+  <div style="display:flex;flex-direction:column;gap:10px">
+    {% for ev in task.events|reverse %}
+    <div style="padding:12px 14px;background:var(--bg-card-alt);border:1px solid var(--line);border-radius:var(--radius-sm)">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+        <div style="font-weight:600;color:var(--text)">
+          {% if ev.event_type == 'created' %}Task creato
+          {% elif ev.event_type == 'status_changed' %}Cambio stato
+          {% elif ev.event_type == 'external_reply' %}Risposta / nota operativa
+          {% elif ev.event_type == 'category_deleted' %}Categoria rimossa
+          {% else %}{{ ev.event_type }}{% endif %}
+        </div>
+        <div class="text-muted" style="font-size:.78rem">{{ ev.created_at.strftime('%d/%m/%Y %H:%M') if ev.created_at else '—' }}</div>
+      </div>
+      <div class="text-muted" style="font-size:.8rem;margin-top:4px">
+        {{ ev.actor_name or ev.actor_email or ev.source or 'Sistema' }}
+        {% if ev.old_status or ev.new_status %}
+          · {{ status_labels.get(ev.old_status, ev.old_status) if ev.old_status else '—' }} → {{ status_labels.get(ev.new_status, ev.new_status) if ev.new_status else '—' }}
+        {% endif %}
+      </div>
+      {% if ev.note %}
+      <div style="margin-top:8px;color:var(--muted);white-space:pre-wrap">{{ ev.note }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted">Nessun aggiornamento tracciato.</p>
+  {% endif %}
+</div>
+
+{% endblock %}
+

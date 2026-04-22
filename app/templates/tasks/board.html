@@ -1,0 +1,296 @@
+{% extends 'base.html' %}
+{% block title %}Task — LogiMetric{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Task Manager</h1>
+    <p class="page-subtitle">Monitora i task esistenti, filtrali e aprili in vista Kanban o tabellare.</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    {% if current_user.is_admin %}
+    <a href="{{ url_for('tasks.kpi_dashboard') }}" class="btn btn-outline">📊 KPI</a>
+    {% endif %}
+    <a href="{{ url_for('tasks.export_excel') }}" class="btn btn-outline">⬇ Export Excel</a>
+    <a href="{{ url_for('tasks.new_task') }}" class="btn btn-primary">+ Crea task</a>
+  </div>
+</div>
+
+{# ── KPI strip ── #}
+<div class="task-kpi-strip">
+  <div class="kpi-card">
+    <div class="kpi-val">{{ kpi.da_fare }}</div>
+    <div class="kpi-label">Da fare</div>
+  </div>
+  <div class="kpi-card kpi-blue">
+    <div class="kpi-val">{{ kpi.in_corso }}</div>
+    <div class="kpi-label">In corso</div>
+  </div>
+  <div class="kpi-card kpi-yellow">
+    <div class="kpi-val">{{ kpi.in_attesa }}</div>
+    <div class="kpi-label">In attesa</div>
+  </div>
+  <div class="kpi-card kpi-red">
+    <div class="kpi-val">{{ kpi.scaduti }}</div>
+    <div class="kpi-label">Scaduti</div>
+  </div>
+  <div class="kpi-card kpi-green">
+    <div class="kpi-val">{{ kpi.completati_settimana }}</div>
+    <div class="kpi-label">Completati (7gg)</div>
+  </div>
+</div>
+
+{# ── Filtri + toggle vista ── #}
+<div class="card" style="margin-bottom:16px">
+  <form method="get" action="{{ url_for('tasks.board') }}" id="filterForm">
+    <input type="hidden" name="view" id="viewInput" value="{{ view }}">
+    <div class="task-filters">
+      <div class="field" style="flex:1;min-width:160px">
+        <label>Cerca</label>
+        <input class="input" name="search" value="{{ filters.search }}" placeholder="Titolo o descrizione…">
+      </div>
+      <div class="field">
+        <label>Categoria</label>
+        <select class="input" name="cat" onchange="this.form.submit()">
+          <option value="">Tutte</option>
+          {% for c in categories %}
+          <option value="{{ c.id }}" {% if c.id|string in filters.cat %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Priorità</label>
+        <select class="input" name="priority" onchange="this.form.submit()">
+          <option value="">Tutte</option>
+          {% for k,v in priority_labels.items() %}
+          <option value="{{ k }}" {% if k in filters.priority %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Stato</label>
+        <select class="input" name="status" onchange="this.form.submit()">
+          <option value="">Tutti</option>
+          {% for k,v in status_labels.items() %}
+          <option value="{{ k }}" {% if k in filters.status %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Scadenza da</label>
+        <input class="input" type="date" name="due_from" value="{{ filters.due_from }}" onchange="this.form.submit()">
+      </div>
+      <div class="field">
+        <label>Scadenza a</label>
+        <input class="input" type="date" name="due_to" value="{{ filters.due_to }}" onchange="this.form.submit()">
+      </div>
+      <div class="field" style="align-self:flex-end;display:flex;gap:8px">
+        <button type="submit" class="btn btn-primary btn-sm">Filtra</button>
+        <a href="{{ url_for('tasks.board', view=view) }}" class="btn btn-outline btn-sm">Reset</a>
+      </div>
+    </div>
+  </form>
+
+  {# Toggle Kanban / Lista #}
+  <div style="display:flex;gap:8px;margin-top:14px;border-top:1px solid var(--line);padding-top:14px">
+    <button onclick="switchView('kanban')"
+            class="btn btn-sm {% if view=='kanban' %}btn-primary{% else %}btn-outline{% endif %}">
+      ⬛ Kanban
+    </button>
+    <button onclick="switchView('list')"
+            class="btn btn-sm {% if view=='list' %}btn-primary{% else %}btn-outline{% endif %}">
+      ☰ Lista
+    </button>
+    <span style="margin-left:auto;color:var(--muted);font-size:.85rem;align-self:center">
+      {{ tasks|length }} task
+    </span>
+  </div>
+</div>
+
+{# ── VISTA KANBAN ── #}
+{% if view == 'kanban' %}
+<div class="kanban-board" id="kanbanBoard">
+  {% for status_key in status_order %}
+  {% if status_key != 'annullato' %}
+  <div class="kanban-col" data-status="{{ status_key }}">
+    <div class="kanban-col-header" style="border-top:3px solid {{ status_colors[status_key] }}">
+      <span class="kanban-col-title">{{ status_labels[status_key] }}</span>
+      <span class="kanban-col-count">{{ kanban[status_key]|length }}</span>
+    </div>
+    <div class="kanban-cards" id="col-{{ status_key }}">
+      {% for task in kanban[status_key] %}
+      {% include 'tasks/_card.html' %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  {# Colonna Annullato — compatta #}
+  <div class="kanban-col kanban-col-muted" data-status="annullato">
+    <div class="kanban-col-header" style="border-top:3px solid #555">
+      <span class="kanban-col-title">Annullato</span>
+      <span class="kanban-col-count">{{ kanban.annullato|length }}</span>
+    </div>
+    <div class="kanban-cards" id="col-annullato">
+      {% for task in kanban['annullato'] %}
+      {% include 'tasks/_card.html' %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{# ── VISTA LISTA ── #}
+{% else %}
+<div class="card">
+  {% if tasks %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Titolo</th><th>Categoria</th><th>Priorità</th>
+          <th>Stato</th><th>Inizio</th><th>Scadenza</th><th class="th-actions">Azioni</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in tasks %}
+        <tr class="{% if task.is_overdue %}row-overdue{% elif task.due_soon %}row-soon{% endif %}">
+          <td class="text-muted">{{ task.id }}</td>
+          <td>
+            <a href="{{ url_for('tasks.detail', task_id=task.id) }}"
+               style="color:var(--text);font-weight:600">{{ task.title }}</a>
+            {% if task.description %}
+            <div class="text-muted" style="font-size:.8rem;margin-top:2px">
+              {{ task.description[:80] }}{% if task.description|length > 80 %}…{% endif %}
+            </div>
+            {% endif %}
+          </td>
+          <td>
+            <span class="cat-badge" style="background:{{ task.category.color }}20;
+                  color:{{ task.category.color }};border:1px solid {{ task.category.color }}40">
+              {{ task.category.name }}
+            </span>
+          </td>
+          <td>
+            <span class="prio-badge" style="background:{{ priority_colors[task.priority] }}20;
+                  color:{{ priority_colors[task.priority] }}">
+              {{ priority_labels[task.priority] }}
+            </span>
+          </td>
+          <td>
+            <span class="status-badge" style="background:{{ status_colors[task.status] }}20;
+                  color:{{ status_colors[task.status] }}">
+              {{ status_labels[task.status] }}
+            </span>
+          </td>
+          <td class="text-muted">{{ task.start_date.strftime('%d/%m/%Y') if task.start_date else '—' }}</td>
+          <td class="{% if task.is_overdue %}text-danger{% elif task.due_soon %}text-warn{% endif %}">
+            {{ task.due_date.strftime('%d/%m/%Y') if task.due_date else '—' }}
+            {% if task.is_overdue %} ⚠{% endif %}
+          </td>
+          <td class="td-actions">
+            <a href="{{ url_for('tasks.edit_task', task_id=task.id) }}"
+               class="btn btn-outline btn-sm">Modifica</a>
+            <form method="post" action="{{ url_for('tasks.delete_task', task_id=task.id) }}"
+                  style="display:inline"
+                  onsubmit="return confirm('Eliminare il task?')">
+              <button class="btn btn-danger btn-sm">Elimina</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+      <rect x="8" y="6" width="32" height="36" rx="4"/>
+      <path d="M16 16h16M16 22h16M16 28h10"/>
+    </svg>
+    <p>Nessun task trovato con i filtri correnti.</p>
+    <a href="{{ url_for('tasks.new_task') }}" class="btn btn-primary" style="margin-top:8px">
+      + Crea il primo task
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<script>
+function switchView(v) {
+  document.getElementById('viewInput').value = v;
+  document.getElementById('filterForm').submit();
+}
+
+// ── Kanban drag & drop ────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const cards = document.querySelectorAll('.task-card[draggable]');
+  const cols  = document.querySelectorAll('.kanban-cards');
+
+  cards.forEach(card => {
+    let isDragging = false;
+
+    card.addEventListener('dragstart', e => {
+      isDragging = true;
+      e.dataTransfer.setData('taskId', card.dataset.taskId);
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      setTimeout(() => { isDragging = false; }, 0);
+    });
+
+    card.addEventListener('click', e => {
+      if (isDragging) return;
+      if (e.target.closest('.task-card-edit')) return;
+      const href = card.dataset.href;
+      if (href) window.location.href = href;
+    });
+
+    card.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.target.closest('.task-card-edit')) return;
+      e.preventDefault();
+      const href = card.dataset.href;
+      if (href) window.location.href = href;
+    });
+  });
+
+  cols.forEach(col => {
+    col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag-over'); });
+    col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
+    col.addEventListener('drop', async e => {
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      const taskId   = e.dataTransfer.getData('taskId');
+      const newStatus = col.id.replace('col-', '');
+      const card     = document.querySelector(`[data-task-id="${taskId}"]`);
+      if (!card) return;
+
+      try {
+        const r = await fetch(`/tasks/${taskId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus }),
+        });
+        const data = await r.json();
+        if (data.ok) {
+          col.appendChild(card);
+          const badge = card.querySelector('.card-status-badge');
+          if (badge) {
+            badge.textContent = data.label;
+            badge.style.color = data.color;
+          }
+          // Aggiorna contatori
+          document.querySelectorAll('.kanban-col').forEach(c => {
+            c.querySelector('.kanban-col-count').textContent =
+              c.querySelector('.kanban-cards').children.length;
+          });
+        }
+      } catch(err) { console.error(err); }
+    });
+  });
+});
+</script>
+{% endblock %}

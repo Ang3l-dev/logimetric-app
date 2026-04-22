@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}LogiMetric{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/favicon.svg') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="auth-body">
+
+<div class="auth-wrap">
+  <div class="auth-brand">
+    <img src="{{ url_for('static', filename='assets/logo.svg') }}" alt="LogiMetric" class="auth-logo">
+    <span>LogiMetric</span>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-stack" style="max-width:440px;width:100%;margin:0 auto 16px">
+    {% for cat, msg in messages %}
+    <div class="flash flash-{{ cat }}">
+      <span>{{ msg }}</span>
+      <button class="flash-close" onclick="this.parentElement.remove()">✕</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+
+  <p class="auth-footer">
+    LogiMetric &mdash; <a href="https://www.logimetric.eu">www.logimetric.eu</a>
+  </p>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

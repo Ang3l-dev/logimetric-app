@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: logimetric-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    healthCheckPath: /healthz
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PREFERRED_URL_SCHEME
+        value: https
+      - key: FORCE_HTTPS_COOKIES
+        value: "1"
+      - key: ENABLE_PROXY_FIX
+        value: "1"
+      - key: AUTO_DB_BOOTSTRAP
+        value: "0"
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: logimetric-db
+          property: connectionString
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_SENDER
+        value: a.venticinque@logimetric.eu
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: TASKS_API_KEY
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+databases:
+  - name: logimetric-db
+    databaseName: logimetric
+    user: logimetric

@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% block title %}Home — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Benvenuto, {{ current_user.name.split()[0] }}</h1>
+    <p class="page-subtitle">Seleziona un'applicazione dalla barra laterale.</p>
+  </div>
+</div>
+
+<div class="home-grid">
+  {% if current_user.can_view('travel_form') %}
+  <a href="{{ url_for('main.travel_form') }}" class="home-card">
+    <div class="home-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="3" width="18" height="18" rx="3"/>
+        <path d="M8 8h8M8 12h8M8 16h5"/>
+      </svg>
+    </div>
+    <div class="home-card-body">
+      <div class="home-card-title">Modulo Trasferta</div>
+      <div class="home-card-desc">Compila e scarica il modulo trasferta in formato Excel.</div>
+    </div>
+    {% if current_user.can_write('travel_form') %}
+    <span class="home-card-badge badge-write">Lettura + Scrittura</span>
+    {% else %}
+    <span class="home-card-badge badge-read">Solo lettura</span>
+    {% endif %}
+  </a>
+  {% endif %}
+
+  {% if current_user.can_view('weekly_program') %}
+  <a href="{{ url_for('main.weekly_program') }}" class="home-card">
+    <div class="home-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="4" width="18" height="17" rx="3"/>
+        <path d="M8 2v4M16 2v4M3 10h18"/>
+      </svg>
+    </div>
+    <div class="home-card-body">
+      <div class="home-card-title">Programma Settimanale</div>
+      <div class="home-card-desc">Genera il programma settimanale con sedi e date.</div>
+    </div>
+    {% if current_user.can_write('weekly_program') %}
+    <span class="home-card-badge badge-write">Lettura + Scrittura</span>
+    {% else %}
+    <span class="home-card-badge badge-read">Solo lettura</span>
+    {% endif %}
+  </a>
+  {% endif %}
+
+  {% if current_user.can_view('dashboard_bi') %}
+  <a href="{{ url_for('main.dashboard_bi') }}" class="home-card">
+    <div class="home-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M3 17l5-6 4 4 4-5 5 3"/>
+        <rect x="3" y="3" width="18" height="18" rx="3"/>
+      </svg>
+    </div>
+    <div class="home-card-body">
+      <div class="home-card-title">Dashboard BI</div>
+      <div class="home-card-desc">Visualizza i report e le dashboard Power BI.</div>
+    </div>
+  </a>
+  {% endif %}
+
+  {% if current_user.can_view('task_manager') %}
+  <a href="{{ url_for('tasks.board') }}" class="home-card">
+    <div class="home-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="5" width="18" height="4" rx="1"/>
+        <rect x="3" y="11" width="12" height="4" rx="1"/>
+        <rect x="3" y="17" width="15" height="4" rx="1"/>
+      </svg>
+    </div>
+    <div class="home-card-body">
+      <div class="home-card-title">Task Manager</div>
+      <div class="home-card-desc">Gestisci attività personali, di magazzino e DG con priorità e scadenze.</div>
+    </div>
+    {% if current_user.can_write('task_manager') %}
+    <span class="home-card-badge badge-write">Lettura + Scrittura</span>
+    {% else %}
+    <span class="home-card-badge badge-read">Solo lettura</span>
+    {% endif %}
+  </a>
+  {% endif %}
+
+  {% if current_user.can_view('gestione_aste') %}
+  <a href="{{ url_for('aste.index') }}" class="home-card">
+    <div class="home-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M3 19l9-14 9 14"/><path d="M9 19v-5h6v5"/>
+      </svg>
+    </div>
+    <div class="home-card-body">
+      <div class="home-card-title">Gestione Aste</div>
+      <div class="home-card-desc">Traccia acquisti, spese, guadagni e scadenze per ogni immobile.</div>
+    </div>
+    {% if current_user.can_write('gestione_aste') %}
+    <span class="home-card-badge badge-write">Lettura + Scrittura</span>
+    {% else %}
+    <span class="home-card-badge badge-read">Solo lettura</span>
+    {% endif %}
+  </a>
+  {% endif %}
+
+  {% if current_user.is_admin %}
+  <a href="{{ url_for('admin.users') }}" class="home-card home-card-admin">
+    <div class="home-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+    </div>
+    <div class="home-card-body">
+      <div class="home-card-title">Gestione Utenti</div>
+      <div class="home-card-desc">Approva registrazioni e gestisci i permessi.</div>
+    </div>
+    <span class="home-card-badge badge-admin">Admin</span>
+  </a>
+  {% endif %}
+
+  {% if not current_user.can_view('travel_form') and not current_user.can_view('weekly_program') and not current_user.can_view('dashboard_bi') and not current_user.is_admin %}
+  <div class="empty-state">
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="24" cy="24" r="20"/>
+      <path d="M24 16v8M24 32h.01"/>
+    </svg>
+    <p>Nessuna applicazione disponibile.</p>
+    <p class="muted">L'amministratore non ha ancora abilitato l'accesso al tuo account.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

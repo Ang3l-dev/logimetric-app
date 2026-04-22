@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Risposta Task — LogiMetric</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #07111f; --bg-card: #0f1e38; --line: rgba(255,255,255,.08);
+      --text: #edf3fb; --muted: #7a90b0; --primary: #1fa3ff;
+      --radius: 16px; --radius-sm: 10px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg);
+           color: var(--text); min-height: 100vh; display: flex;
+           align-items: center; justify-content: center; padding: 20px; }
+    .wrap { width: 100%; max-width: 520px; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+             font-weight: 800; font-size: 1.2rem; }
+    .brand-dot { width: 36px; height: 36px; border-radius: 50%;
+                 background: linear-gradient(135deg, #1fa3ff, #59c0ff);
+                 display: grid; place-items: center; font-size: .9rem;
+                 font-weight: 900; color: #07111f; }
+    .card { background: var(--bg-card); border: 1px solid var(--line);
+            border-radius: var(--radius); padding: 28px; }
+    .task-header { margin-bottom: 20px; padding-bottom: 16px;
+                   border-bottom: 1px solid var(--line); }
+    .task-id { font-size: .75rem; color: var(--muted); font-weight: 700;
+               text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+    .task-title { font-size: 1.3rem; font-weight: 800; margin: 0 0 10px; }
+    .task-meta { display: flex; gap: 10px; flex-wrap: wrap; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 999px;
+             font-size: .75rem; font-weight: 700; }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    label { font-size: .82rem; font-weight: 600; color: var(--muted); }
+    .input { width: 100%; padding: 10px 13px; border-radius: var(--radius-sm);
+             border: 1px solid var(--line); background: rgba(255,255,255,.04);
+             color: var(--text); font: inherit; font-size: .92rem;
+             outline: none; transition: border-color .18s; }
+    .input:focus { border-color: var(--primary);
+                   box-shadow: 0 0 0 3px rgba(31,163,255,.15); }
+    select.input { cursor: pointer; }
+    textarea.input { min-height: 100px; resize: vertical; }
+    .btn { width: 100%; padding: 13px; border-radius: var(--radius-sm); border: none;
+           background: linear-gradient(135deg, #1fa3ff, #59c0ff); color: #07111f;
+           font: inherit; font-size: 1rem; font-weight: 700; cursor: pointer;
+           margin-top: 8px; transition: filter .18s; }
+    .btn:hover { filter: brightness(1.08); }
+    .footer { text-align: center; color: var(--muted); font-size: .78rem; margin-top: 20px; }
+    .prio-alta { background: rgba(245,166,35,.15); color: #f5a623; }
+    .prio-critica { background: rgba(224,92,92,.15); color: #e05c5c; }
+    .prio-media { background: rgba(31,163,255,.15); color: #1fa3ff; }
+    .prio-bassa { background: rgba(74,92,120,.2); color: #7a90b0; }
+    .status-badge { background: rgba(31,163,255,.1); color: #7cc7ff; }
+    select.input option { background: #0d1830; color: #edf3fb; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="brand-dot">L</div>
+    LogiMetric
+  </div>
+
+  <div class="card">
+    <div class="task-header">
+      <div class="task-id">Task #{{ task.id }} — {{ task.category.name }}</div>
+      <div class="task-title">{{ task.title }}</div>
+      <div class="task-meta">
+        <span class="badge prio-{{ task.priority }}">
+          {{ priority_labels.get(task.priority, task.priority) }}
+        </span>
+        <span class="badge status-badge">
+          Stato attuale: {{ status_labels.get(task.status, task.status) }}
+        </span>
+        {% if task.due_date %}
+        <span class="badge" style="background:rgba(255,255,255,.05);color:var(--muted)">
+          Scadenza: {{ task.due_date.strftime('%d/%m/%Y') }}
+        </span>
+        {% endif %}
+      </div>
+      {% if task.description %}
+      <p style="color:var(--muted);font-size:.88rem;margin:12px 0 0;line-height:1.6">
+        {{ task.description }}
+      </p>
+      {% endif %}
+    </div>
+
+    <form method="post" action="{{ url_for('tasks.respond_submit', token=task.external_token) }}">
+      <p style="color:var(--muted);font-size:.9rem;margin:0 0 20px">
+        Aggiorna lo stato di questa attività e aggiungi eventuali note.
+      </p>
+
+      <div class="field">
+        <label for="replied_by">Il tuo nome / email</label>
+        <input id="replied_by" name="replied_by" type="text" class="input"
+               placeholder="Mario Rossi / mario@azienda.it">
+      </div>
+
+      <div class="field">
+        <label for="status">Nuovo stato *</label>
+        <select id="status" name="status" class="input" required>
+          {% for k, v in status_labels.items() %}
+          {% if k not in ('da_fare',) %}
+          <option value="{{ k }}" {% if task.status == k %}selected{% endif %}>{{ v }}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="note">Note / aggiornamento</label>
+        <textarea id="note" name="note" class="input"
+                  placeholder="Descrivi lo stato di avanzamento, eventuali problemi o date stimate…"></textarea>
+      </div>
+
+      <button type="submit" class="btn">Invia aggiornamento</button>
+    </form>
+  </div>
+
+  <div class="footer">
+    LogiMetric — <a href="https://www.logimetric.eu" style="color:var(--primary)">logimetric.eu</a>
+  </div>
+</div>
+</body>
+</html>

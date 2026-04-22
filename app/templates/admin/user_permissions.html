@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Permessi {{ managed_user.name }} — LogiMetric{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Permessi — {{ managed_user.name }}</h1>
+    <p class="page-subtitle">{{ managed_user.email }} &mdash; definisci cosa può vedere e fare.</p>
+  </div>
+  <a href="{{ url_for('admin.users') }}" class="btn btn-outline">← Torna agli utenti</a>
+</div>
+
+<div class="card" style="max-width:640px">
+  <form method="post" action="{{ url_for('admin.save_permissions', user_id=managed_user.id) }}">
+    <div class="perm-form-stack">
+      {% for module_key, module_label in modules.items() %}
+      <div class="perm-form-row">
+        <div class="perm-module-name">
+          <strong>{{ module_label }}</strong>
+        </div>
+        <div class="perm-toggles">
+          <label class="toggle-label">
+            <input type="checkbox" name="{{ module_key }}_view"
+                   {% if perms[module_key]['can_view'] %}checked{% endif %}
+                   onchange="syncToggles(this, '{{ module_key }}')">
+            <span class="toggle-track"></span>
+            Visualizza
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" name="{{ module_key }}_write"
+                   {% if perms[module_key]['can_write'] %}checked{% endif %}
+                   onchange="syncToggles(this, '{{ module_key }}')">
+            <span class="toggle-track"></span>
+            Modifica / Genera
+          </label>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:28px">
+      <button type="submit" class="btn btn-primary">Salva permessi</button>
+      <a href="{{ url_for('admin.users') }}" class="btn btn-outline">Annulla</a>
+    </div>
+  </form>
+</div>
+
+<script>
+function syncToggles(el, module) {
+  const view  = document.querySelector(`[name="${module}_view"]`);
+  const write = document.querySelector(`[name="${module}_write"]`);
+  // Se si attiva "Modifica", si attiva anche "Visualizza"
+  if (el === write && write.checked) view.checked = true;
+  // Se si disattiva "Visualizza", si disattiva anche "Modifica"
+  if (el === view && !view.checked) write.checked = false;
+}
+</script>
+{% endblock %}
