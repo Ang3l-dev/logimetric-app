@@ -74,6 +74,9 @@ def _ensure_runtime_schema(app: Flask) -> None:
 
     with app.app_context():
         db.create_all()
+        _add_missing_columns('task_categories', [
+            ('created_at', 'created_at DATETIME'),
+        ])
         _add_missing_columns('tasks', [
             ('created_by_user_id', 'created_by_user_id INTEGER'),
             ('created_by_name', 'created_by_name VARCHAR(120)'),
@@ -190,14 +193,15 @@ def create_app() -> Flask:
     app.register_blueprint(tasks_bp, url_prefix='/tasks')
     app.register_blueprint(aste_bp, url_prefix='/aste')
 
-    # Bootstrap opzionale del DB; in produzione usare Flask-Migrate.
+    # Schema runtime: il progetto non include migration versionate, quindi
+    # assicuriamo sempre la presenza delle tabelle/colonne richieste dal task manager.
     with app.app_context():
+        _ensure_runtime_schema(app)
         if app.config.get('AUTO_DB_BOOTSTRAP', False):
-            db.create_all()
             _run_legacy_bootstrap_migrations(app)
             _seed_default_categories()
         else:
-            app.logger.info('AUTO_DB_BOOTSTRAP disattivato: uso schema gestito via migration.')
+            app.logger.info("AUTO_DB_BOOTSTRAP disattivato: schema runtime verificato all'avvio.")
 
     return app
 

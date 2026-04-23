@@ -543,7 +543,7 @@ def api_update(token: str):
     if not task:
         return jsonify({'error': 'task not found'}), 404
 
-    body       = request.get_json(force=True) or {}
+    body       = _request_payload()
     new_status = (body.get('status') or '').strip().lower()
     note       = (body.get('note') or '').strip()
     replied_by = (body.get('replied_by') or '').strip()
@@ -625,7 +625,7 @@ def api_helper():
     if api_key and request.headers.get('X-API-Key') != api_key:
         return jsonify({'error': 'unauthorized'}), 401
 
-    body           = request.get_json(force=True) or {}
+    body           = _request_payload()
     requester_email = (body.get('email') or '').strip().lower()
 
     if not requester_email or '@' not in requester_email:
@@ -957,6 +957,49 @@ def _parse_date(value):
     except ValueError:
         return None
 
+def _request_payload() -> dict:
+    """
+    Payload tollerante per Power Automate / Power Apps.
+    Accetta JSON, form-urlencoded e body raw JSON.
+    Supporta anche chiavi alternative tipiche dei connettori low-code.
+    """
+    payload: dict = {}
+
+    data = request.get_json(silent=True)
+    if isinstance(data, dict):
+        payload.update(data)
+
+    if request.form:
+        payload.update(request.form.to_dict(flat=True))
+
+    if not payload:
+        raw = (request.get_data(cache=True, as_text=True) or '').strip()
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    payload.update(parsed)
+            except Exception:
+                current_app.logger.warning('Payload non JSON ricevuto su %s', request.path)
+
+    aliases = {
+        'task_id': ['taskId', 'TaskId', 'id', 'task'],
+        'status': ['new_status', 'newStatus', 'selected_status', 'selectedStatus', 'keyword', 'response'],
+        'note': ['comment', 'comments', 'message', 'body', 'notes', 'reply_note', 'replyNote'],
+        'replied_by': ['repliedBy', 'display_name', 'displayName', 'name', 'user_name', 'userName'],
+        'email': ['recipient_email', 'recipientEmail', 'user_email', 'userEmail', 'mail', 'upn'],
+    }
+    for canonical, keys in aliases.items():
+        if payload.get(canonical) not in (None, ''):
+            continue
+        for key in keys:
+            value = payload.get(key)
+            if value not in (None, ''):
+                payload[canonical] = value
+                break
+
+    return payload
+
 
 def _notify_category(task: Task):
     cat = task.category
@@ -1042,7 +1085,7 @@ def api_update_by_id(task_id: int):
     if not task:
         return jsonify({'error': 'task not found'}), 404
 
-    body       = request.get_json(force=True) or {}
+    body       = _request_payload()
     keyword    = (body.get('keyword') or body.get('status') or '').strip().upper()
     note       = (body.get('note') or '').strip()
     replied_by = (body.get('replied_by') or '').strip()
@@ -1233,7 +1276,7 @@ def api_task_update_powerapp():
     if api_key and request.headers.get('X-API-Key') != api_key:
         return jsonify({'ok': False, 'message': 'Non autorizzato.'}), 401
 
-    body       = request.get_json(force=True) or {}
+    body       = _request_payload()
     task_id    = body.get('task_id')
     new_status = (body.get('status') or '').strip().lower()
     note       = (body.get('note') or '').strip()

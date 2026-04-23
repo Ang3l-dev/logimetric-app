@@ -2,59 +2,21 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}LogiMetric{% endblock %}</title>
   <meta name="csrf-token" content="{{ csrf_token() }}">
-
-  <!-- PWA Meta Tags -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="LogiMetric">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#07111f">
-
-  <!-- PWA Manifest -->
-  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='assets/apple-touch-icon.png') }}">
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/favicon.svg') }}">
-
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
-  <!-- Stylesheets -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
-
   {% block head %}{% endblock %}
 </head>
 <body>
 
-<!-- Pull-to-refresh indicator -->
-<div class="ptr-indicator" id="ptrIndicator">
-  <div class="ptr-spinner"></div>
-</div>
-
-<!-- ── Top App Bar (Mobile) ── -->
-<header class="mobile-topbar">
-  <div class="mobile-topbar-inner">
-    <a class="mobile-brand" href="{{ url_for('main.index') }}">
-      <img src="{{ url_for('static', filename='assets/logo.svg') }}" alt="LogiMetric" class="mobile-brand-logo">
-      <span class="mobile-brand-name">LogiMetric</span>
-    </a>
-    {% if current_user.is_authenticated %}
-    <button class="mobile-user-btn" onclick="openUserDrawer()">
-      {{ current_user.name[0].upper() }}
-    </button>
-    {% endif %}
-  </div>
-</header>
-
-<!-- ── App Shell ── -->
 <div class="shell">
 
-  <!-- Sidebar (visibile solo su desktop) -->
+  {# ── Sidebar ── #}
   <aside class="sidebar">
     <a class="brand" href="{{ url_for('main.index') }}">
       <img src="{{ url_for('static', filename='assets/logo.svg') }}" alt="LogiMetric" class="brand-logo">
@@ -63,58 +25,102 @@
         <div class="brand-tag">Dati, processi, performance.</div>
       </div>
     </a>
+
     <nav class="nav-stack">
       <div class="nav-group-label">Applicazioni</div>
+
       {% if current_user.is_authenticated and current_user.can_view('travel_form') %}
-      <a class="nav-item {% if request.endpoint == 'main.travel_form' %}active{% endif %}" href="{{ url_for('main.travel_form') }}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h6M7 10h6M7 13h4"/></svg>
+      <a class="nav-item {% if request.endpoint == 'main.travel_form' %}active{% endif %}"
+         href="{{ url_for('main.travel_form') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="3" y="3" width="14" height="14" rx="2"/>
+          <path d="M7 7h6M7 10h6M7 13h4"/>
+        </svg>
         Modulo Trasferta
       </a>
       {% endif %}
+
       {% if current_user.is_authenticated and current_user.can_view('weekly_program') %}
-      <a class="nav-item {% if request.endpoint == 'main.weekly_program' %}active{% endif %}" href="{{ url_for('main.weekly_program') }}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M7 2v4M13 2v4M3 9h14"/></svg>
+      <a class="nav-item {% if request.endpoint == 'main.weekly_program' %}active{% endif %}"
+         href="{{ url_for('main.weekly_program') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="3" y="4" width="14" height="13" rx="2"/>
+          <path d="M7 2v4M13 2v4M3 9h14"/>
+        </svg>
         Programma Settimanale
       </a>
       {% endif %}
+
       {% if current_user.is_authenticated and current_user.can_view('dashboard_bi') %}
-      <a class="nav-item {% if request.endpoint == 'main.dashboard_bi' %}active{% endif %}" href="{{ url_for('main.dashboard_bi') }}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 14l4-5 4 3 3-4 3 2"/><rect x="3" y="3" width="14" height="14" rx="2"/></svg>
+      <a class="nav-item {% if request.endpoint == 'main.dashboard_bi' %}active{% endif %}"
+         href="{{ url_for('main.dashboard_bi') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M3 14l4-5 4 3 3-4 3 2"/>
+          <rect x="3" y="3" width="14" height="14" rx="2"/>
+        </svg>
         Dashboard BI
       </a>
       {% endif %}
+
       {% if current_user.is_authenticated and current_user.can_view('task_manager') %}
-      <a class="nav-item {% if request.endpoint and request.endpoint.startswith('tasks.') %}active{% endif %}" href="{{ url_for('tasks.board') }}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="4" width="16" height="3" rx="1"/><rect x="2" y="9" width="10" height="3" rx="1"/><rect x="2" y="14" width="13" height="3" rx="1"/></svg>
+      <a class="nav-item {% if request.endpoint and request.endpoint.startswith('tasks.') %}active{% endif %}"
+         href="{{ url_for('tasks.board') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="2" y="4" width="16" height="3" rx="1"/><rect x="2" y="9" width="10" height="3" rx="1"/>
+          <rect x="2" y="14" width="13" height="3" rx="1"/>
+        </svg>
         Task Manager
       </a>
       {% endif %}
+
       {% if current_user.is_authenticated and current_user.can_view('gestione_aste') %}
-      <a class="nav-item {% if request.endpoint and request.endpoint.startswith('aste.') %}active{% endif %}" href="{{ url_for('aste.index') }}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 15l7-10 7 10"/><path d="M8 15v-4h4v4"/><circle cx="10" cy="4" r="1.5" fill="currentColor" stroke="none"/></svg>
+      <a class="nav-item {% if request.endpoint and request.endpoint.startswith('aste.') %}active{% endif %}"
+         href="{{ url_for('aste.index') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M3 15l7-10 7 10"/><path d="M8 15v-4h4v4"/>
+          <circle cx="10" cy="4" r="1.5" fill="currentColor" stroke="none"/>
+        </svg>
         Gestione Aste
       </a>
       {% endif %}
+
       {% if current_user.is_authenticated and current_user.is_admin %}
       <div class="nav-group-label" style="margin-top:16px">Amministrazione</div>
-      <a class="nav-item {% if request.endpoint == 'admin.users' %}active{% endif %}" href="{{ url_for('admin.users') }}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="7" r="3"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+      <a class="nav-item {% if request.endpoint == 'admin.users' %}active{% endif %}"
+         href="{{ url_for('admin.users') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <circle cx="10" cy="7" r="3"/>
+          <path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+        </svg>
         Gestione Utenti
       </a>
-      <a class="nav-item {% if request.endpoint == 'admin.task_categories' %}active{% endif %}" href="{{ url_for('admin.task_categories') }}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="6" r="2"/><circle cx="14" cy="6" r="2"/><circle cx="6" cy="14" r="2"/><circle cx="14" cy="14" r="2"/></svg>
+      <a class="nav-item {% if request.endpoint == 'admin.task_categories' %}active{% endif %}"
+         href="{{ url_for('admin.task_categories') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <circle cx="6" cy="6" r="2"/><circle cx="14" cy="6" r="2"/>
+          <circle cx="6" cy="14" r="2"/><circle cx="14" cy="14" r="2"/>
+        </svg>
         Categorie Task
       </a>
-      <a class="nav-item {% if request.endpoint == 'admin.contacts' %}active{% endif %}" href="{{ url_for('admin.contacts') }}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="7" r="3"/><path d="M2 17c0-3 2.7-5 6-5"/><path d="M14 11v6M11 14h6"/></svg>
+      <a class="nav-item {% if request.endpoint == 'admin.contacts' %}active{% endif %}"
+         href="{{ url_for('admin.contacts') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <circle cx="8" cy="7" r="3"/><path d="M2 17c0-3 2.7-5 6-5"/>
+          <path d="M14 11v6M11 14h6"/>
+        </svg>
         Rubrica
       </a>
-      <a class="nav-item {% if request.endpoint == 'admin.bi_reports' %}active{% endif %}" href="{{ url_for('admin.bi_reports') }}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="16" height="16" rx="2"/><path d="M5 13l3-4 3 2 3-4"/></svg>
+      <a class="nav-item {% if request.endpoint == 'admin.bi_reports' %}active{% endif %}"
+         href="{{ url_for('admin.bi_reports') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="2" y="2" width="16" height="16" rx="2"/>
+          <path d="M5 13l3-4 3 2 3-4"/>
+        </svg>
         Gestione Report BI
       </a>
       {% endif %}
     </nav>
+
     <div class="sidebar-footer">
       {% if current_user.is_authenticated %}
       <div class="user-card">
@@ -124,15 +130,18 @@
           <div class="user-role">{{ 'Amministratore' if current_user.is_admin else 'Utente' }}</div>
         </div>
         <a href="{{ url_for('auth.logout') }}" class="logout-btn" title="Esci">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 10H3M13 10l-3-3m3 3l-3 3M7 4H5a2 2 0 00-2 2v8a2 2 0 002 2h2"/></svg>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M13 10H3M13 10l-3-3m3 3l-3 3M7 4H5a2 2 0 00-2 2v8a2 2 0 002 2h2"/>
+          </svg>
         </a>
       </div>
       {% endif %}
     </div>
   </aside>
 
-  <!-- Main Content -->
+  {# ── Main content ── #}
   <main class="main-content">
+
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
     <div class="flash-stack">
@@ -145,212 +154,14 @@
     </div>
     {% endif %}
     {% endwith %}
+
     {% block content %}{% endblock %}
   </main>
+
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════
-     BOTTOM NAVIGATION (Mobile)
-     ══════════════════════════════════════════════════════════════ -->
-{% if current_user.is_authenticated %}
-<nav class="mobile-bottom-nav">
-  <div class="mobile-bottom-nav-inner">
-
-    <a class="nav-tab {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">
-      <span class="nav-tab-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-      </span>
-      <span class="nav-tab-label">Home</span>
-    </a>
-
-    {% if current_user.can_view('task_manager') %}
-    <a class="nav-tab {% if request.endpoint and request.endpoint.startswith('tasks.') %}active{% endif %}" href="{{ url_for('tasks.board') }}">
-      <span class="nav-tab-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-          <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-        </svg>
-      </span>
-      <span class="nav-tab-label">Task</span>
-    </a>
-    {% endif %}
-
-    {% if current_user.can_view('gestione_aste') %}
-    <a class="nav-tab {% if request.endpoint and request.endpoint.startswith('aste.') %}active{% endif %}" href="{{ url_for('aste.index') }}">
-      <span class="nav-tab-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 22l9-18 9 18"/><path d="M9 22v-6h6v6"/>
-        </svg>
-      </span>
-      <span class="nav-tab-label">Aste</span>
-    </a>
-    {% endif %}
-
-    {% if current_user.can_view('dashboard_bi') %}
-    <a class="nav-tab {% if request.endpoint == 'main.dashboard_bi' %}active{% endif %}" href="{{ url_for('main.dashboard_bi') }}">
-      <span class="nav-tab-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
-        </svg>
-      </span>
-      <span class="nav-tab-label">BI</span>
-    </a>
-    {% endif %}
-
-    <button class="nav-tab" onclick="openMoreSheet()" type="button">
-      <span class="nav-tab-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
-        </svg>
-      </span>
-      <span class="nav-tab-label">Altro</span>
-    </button>
-  </div>
-</nav>
-
-<!-- More Sheet -->
-<div class="mobile-more-overlay" id="moreOverlay" onclick="if(event.target===this)closeMoreSheet()">
-  <div class="mobile-more-sheet">
-    <div class="more-sheet-handle"></div>
-    {% if current_user.can_view('travel_form') or current_user.can_view('weekly_program') %}
-    <div class="more-sheet-title">Applicazioni</div>
-    {% endif %}
-    {% if current_user.can_view('travel_form') %}
-    <a href="{{ url_for('main.travel_form') }}" class="more-sheet-item {% if request.endpoint == 'main.travel_form' %}active-item{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
-      Modulo Trasferta
-    </a>
-    {% endif %}
-    {% if current_user.can_view('weekly_program') %}
-    <a href="{{ url_for('main.weekly_program') }}" class="more-sheet-item {% if request.endpoint == 'main.weekly_program' %}active-item{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
-      Programma Settimanale
-    </a>
-    {% endif %}
-    {% if current_user.is_admin %}
-    <div class="more-sheet-separator"></div>
-    <div class="more-sheet-title">Amministrazione</div>
-    <a href="{{ url_for('admin.users') }}" class="more-sheet-item {% if request.endpoint == 'admin.users' %}active-item{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      Gestione Utenti
-    </a>
-    <a href="{{ url_for('admin.task_categories') }}" class="more-sheet-item {% if request.endpoint == 'admin.task_categories' %}active-item{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg>
-      Categorie Task
-    </a>
-    <a href="{{ url_for('admin.contacts') }}" class="more-sheet-item {% if request.endpoint == 'admin.contacts' %}active-item{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 014-4h6"/><path d="M19 14v6M16 17h6"/></svg>
-      Rubrica
-    </a>
-    <a href="{{ url_for('admin.bi_reports') }}" class="more-sheet-item {% if request.endpoint == 'admin.bi_reports' %}active-item{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="20" rx="3"/><path d="M6 16l4-5 4 2 4-5"/></svg>
-      Gestione Report BI
-    </a>
-    <a href="{{ url_for('admin.user_permissions') if 'user_permissions' in request.endpoint|default('') else url_for('admin.users') }}" class="more-sheet-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-      Permessi Utenti
-    </a>
-    {% endif %}
-  </div>
-</div>
-
-<!-- User Drawer -->
-<div class="user-drawer-overlay" id="userDrawerOverlay" onclick="if(event.target===this)closeUserDrawer()">
-  <div class="user-drawer">
-    <button class="user-drawer-close" onclick="closeUserDrawer()">✕</button>
-    <div class="user-drawer-header">
-      <div class="user-drawer-avatar">{{ current_user.name[0].upper() }}</div>
-      <div class="user-drawer-name">{{ current_user.name }}</div>
-      <div class="user-drawer-role">{{ 'Amministratore' if current_user.is_admin else 'Utente' }}</div>
-    </div>
-    <div class="more-sheet-separator" style="margin:4px 0"></div>
-    <a href="{{ url_for('auth.logout') }}" class="user-drawer-action danger">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 10H3M17 10l-4-4m4 4l-4 4M10 4H8a2 2 0 00-2 2v12a2 2 0 002 2h2"/></svg>
-      Esci dall'app
-    </a>
-  </div>
-</div>
-{% endif %}
-
-<!-- PWA Install Banner (iOS) -->
-<div class="pwa-install-banner" id="pwaBanner">
-  <div class="pwa-banner-icon">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-  </div>
-  <div class="pwa-banner-text">
-    <div class="pwa-banner-title">Installa LogiMetric</div>
-    <div class="pwa-banner-sub">Tocca <strong>Condividi</strong> → <strong>Aggiungi a Home</strong></div>
-  </div>
-  <button class="pwa-banner-close" onclick="dismissPwaBanner()">✕</button>
-</div>
-
-<!-- Scripts -->
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script src="{{ url_for('static', filename='js/email_panel.js') }}"></script>
 {% block scripts %}{% endblock %}
-
-<script>
-/* Service Worker Registration */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/static/sw.js', { scope: '/' }).catch(() => {});
-  });
-}
-
-/* More Sheet */
-function openMoreSheet() {
-  document.getElementById('moreOverlay').classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-function closeMoreSheet() {
-  document.getElementById('moreOverlay').classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-/* User Drawer */
-function openUserDrawer() {
-  document.getElementById('userDrawerOverlay').classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-function closeUserDrawer() {
-  document.getElementById('userDrawerOverlay').classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-/* Escape key */
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeMoreSheet(); closeUserDrawer(); }
-});
-
-/* Chiudi sheet quando si clicca link */
-document.querySelectorAll('.more-sheet-item').forEach(el => {
-  el.addEventListener('click', closeMoreSheet);
-});
-
-/* PWA Banner (iOS) */
-function dismissPwaBanner() {
-  document.getElementById('pwaBanner').classList.remove('show');
-  localStorage.setItem('lm_pwa_dismissed', '1');
-}
-
-window.addEventListener('load', () => {
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const isStandalone = window.navigator.standalone === true;
-  if (isIOS && !isStandalone && !localStorage.getItem('lm_pwa_dismissed')) {
-    setTimeout(() => document.getElementById('pwaBanner').classList.add('show'), 3000);
-  }
-});
-
-/* Touch feedback */
-['btn','nav-tab','more-sheet-item','home-card','user-drawer-action'].forEach(cls => {
-  document.querySelectorAll('.' + cls).forEach(el => {
-    el.addEventListener('touchstart', function(){ this.style.opacity='.75'; }, {passive:true});
-    el.addEventListener('touchend',   function(){ this.style.opacity='';   }, {passive:true});
-    el.addEventListener('touchcancel',function(){ this.style.opacity='';   }, {passive:true});
-  });
-});
-</script>
 </body>
 </html>
