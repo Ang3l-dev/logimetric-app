@@ -32,24 +32,6 @@ services:
         sync: false
       - key: CRON_SECRET
         sync: false
-      - key: POWERAPP_TASK_TOKEN_PARAM
-        value: task_token
-
-  - type: cron
-    name: logimetric-task-reminders
-    runtime: python
-    schedule: "0 8 * * *"
-    buildCommand: pip install -r requirements.txt
-    startCommand: >-
-      python -c "import os, urllib.request; base=os.environ['APP_INTERNAL_HOSTPORT'].rstrip('/'); secret=os.environ['CRON_SECRET']; url=f'http://{base}/tasks/api/cron/reminders?secret={secret}'; print('Calling', url); resp=urllib.request.urlopen(url, timeout=120); print(resp.read().decode())"
-    envVars:
-      - key: APP_INTERNAL_HOSTPORT
-        fromService:
-          name: logimetric-app
-          type: web
-          property: hostport
-      - key: CRON_SECRET
-        sync: false
 
 databases:
   - name: logimetric-db

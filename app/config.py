@@ -62,7 +62,6 @@ class Config:
     CRON_SECRET = os.environ.get('CRON_SECRET', '')
     POWERAPP_URL = os.environ.get('POWERAPP_URL', '')
     POWERAPP_TASK_ID_PARAM = os.environ.get('POWERAPP_TASK_ID_PARAM', 'task_id')
-    POWERAPP_TASK_TOKEN_PARAM = os.environ.get('POWERAPP_TASK_TOKEN_PARAM', 'task_token')
     RESET_TOKEN_MAX_AGE = int(os.environ.get('RESET_TOKEN_MAX_AGE', '3600'))
 
     # Telegram notifiche task
@@ -70,6 +69,14 @@ class Config:
     TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
     TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
     APP_BASE_URL = os.environ.get('APP_BASE_URL', '')
+
+    # Teams notifiche task via Power Automate
+    # Il backend chiama un flow dedicato con trigger HTTP; il flow pubblica
+    # il messaggio Teams diretto all'utente tramite Flow bot.
+    TEAMS_NOTIFICATIONS_ENABLED = os.environ.get('TEAMS_NOTIFICATIONS_ENABLED', '0') == '1'
+    TEAMS_FLOW_URL = os.environ.get('TEAMS_FLOW_URL', '')
+    TEAMS_FLOW_API_KEY = os.environ.get('TEAMS_FLOW_API_KEY', '')
+    TEAMS_FLOW_TIMEOUT_SECONDS = int(os.environ.get('TEAMS_FLOW_TIMEOUT_SECONDS', '15'))
 
     # Rate limiting
     LOGIN_RATE_LIMIT_ATTEMPTS = int(os.environ.get('LOGIN_RATE_LIMIT_ATTEMPTS', '8'))

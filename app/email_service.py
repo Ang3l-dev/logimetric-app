@@ -205,22 +205,6 @@ def send_task_notification(to_email, subject: str, tasks: list,
             return value
         return value[: max(0, limit - 1)].rstrip() + '…'
 
-    def _attachment_block(items: list[dict] | None, title: str) -> str:
-        items = items or []
-        rows = ''
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            label = (item.get('label') or item.get('url') or '').strip()
-            url = (item.get('url') or '').strip()
-            provider = (item.get('provider') or 'link').upper()
-            if not url:
-                continue
-            rows += f'<li style="margin:0 0 8px"><a href="{url}" target="_blank" style="color:#7cc7ff;text-decoration:none">{label}</a> <span style="color:#4a5c78;font-size:11px">[{provider}]</span></li>'
-        if not rows:
-            return ''
-        return f'<div style="margin-top:16px;padding:14px 16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:12px"><div style="font-size:11px;color:#7a90b0;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">{title}</div><ul style="margin:0;padding-left:18px;color:#aab9d1">{rows}</ul></div>'
-
     def task_row(t):
         pcolor = PRIO_BADGE.get(t.priority, '#888')
         scolor = STATUS_BADGE.get(t.status, '#888')
@@ -287,17 +271,12 @@ def send_task_notification(to_email, subject: str, tasks: list,
 
         # Deep link Power App — aggiunge task_id come parametro URL
         # La Power App legge Param("task_id") e apre direttamente quel task
-        deep_link = build_powerapp_task_url(t.id, t.external_token)
+        deep_link = build_powerapp_task_url(t.id)
         relay_link = url_for('tasks.open_in_powerapp', task_id=t.id, _external=True)
 
         prio_label  = {'bassa': 'Bassa', 'media': 'Media',
                        'alta': 'Alta', 'critica': '🔴 Critica'}.get(t.priority, t.priority)
         due_str     = t.due_date.strftime('%d/%m/%Y') if t.due_date else '—'
-
-        task_attachment_block = _attachment_block([
-            {'label': getattr(att, 'display_label', None), 'url': getattr(att, 'link_url', None), 'provider': getattr(att, 'storage_provider', 'link')}
-            for att in t.attachments.filter_by(attachment_scope='task').all()
-        ], 'Allegati task')
 
         icon_src = _load_inline_powerapp_icon()
         app_btn = ''
@@ -364,24 +343,14 @@ def send_task_notification(to_email, subject: str, tasks: list,
         <p>È stato assegnato un nuovo task che richiede la vostra attenzione:</p>
         {table_header}{rows}{table_footer}
         {desc_html}
-        {task_attachment_block}
         {app_btn}
         <p style="font-size:11px;color:#3a4c60;margin-top:16px;text-align:center">
           Riferimento interno: <strong>[TASK-{t.id}]</strong>
         </p>"""
 
     elif template_type == 'reminder':
-        reminder_days = (extra or {}).get('reminder_days_before_due') if isinstance(extra, dict) else None
-        if reminder_days == 2:
-            intro = f'Hai <strong>{len(tasks)}</strong> task in scadenza tra 2 giorni:'
-        elif reminder_days == 1:
-            intro = f'Hai <strong>{len(tasks)}</strong> task in scadenza domani:'
-        elif reminder_days == 0:
-            intro = f'Hai <strong>{len(tasks)}</strong> task in scadenza oggi:'
-        else:
-            intro = f'Hai <strong>{len(tasks)}</strong> task urgenti:'
         body = f"""
-        <p>{intro}</p>
+        <p>Hai <strong>{len(tasks)}</strong> task urgenti (scaduti o in scadenza oggi/domani):</p>
         {table_header}{rows}{table_footer}"""
 
     elif template_type == 'weekly_report':
@@ -396,8 +365,7 @@ def send_task_notification(to_email, subject: str, tasks: list,
         {table_header}{rows}{table_footer}
         <p style="margin-top:16px"><strong>Da:</strong> {e.get('replied_by','—')}<br>
         <strong>Nuovo stato:</strong> {TASK_STATUS_LABELS.get(e.get('new_status',''), e.get('new_status',''))}<br>
-        <strong>Note:</strong> {e.get('note','—')}</p>
-        {_attachment_block(e.get('attachments') if isinstance(e, dict) else None, 'Allegati risposta')}"""
+        <strong>Note:</strong> {e.get('note','—')}</p>"""
     elif template_type == 'thread_update':
         e = extra or {}
         body = f"""
@@ -408,8 +376,7 @@ def send_task_notification(to_email, subject: str, tasks: list,
           <p style="margin:0 0 8px"><strong>Da:</strong> {e.get('actor_name') or e.get('actor_email') or '—'}</p>
           <p style="margin:0 0 8px"><strong>Stato:</strong> {TASK_STATUS_LABELS.get(e.get('new_status',''), e.get('new_status','—'))}</p>
           <p style="margin:0;color:#aab9d1;white-space:pre-wrap">{e.get('note') or '—'}</p>
-        </div>
-        {_attachment_block(e.get('attachments') if isinstance(e, dict) else None, 'Allegati aggiornamento')}"""
+        </div>"""
     else:
         body = f"{table_header}{rows}{table_footer}"
 

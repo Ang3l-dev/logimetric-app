@@ -60,30 +60,20 @@ def _configure_logging(app: Flask) -> None:
 def _ensure_runtime_schema(app: Flask) -> None:
     """Aggiunge colonne mancanti sui database esistenti senza richiedere una migrazione manuale."""
     from sqlalchemy import inspect
-    from .models import Task, TaskEvent, TaskRecipientResponse, TaskCategory, TaskAttachment
+    from .models import Task, TaskEvent, TaskRecipientResponse
+
+    def _add_missing_columns(table_name: str, statements: list[str]) -> None:
+        inspector = inspect(db.engine)
+        existing = {c['name'] for c in inspector.get_columns(table_name)}
+        with db.engine.begin() as conn:
+            for col_name, ddl in statements:
+                if col_name in existing:
+                    continue
+                conn.execute(db.text(f'ALTER TABLE {table_name} ADD COLUMN {ddl}'))
+                app.logger.info('Schema bootstrap: added %s.%s', table_name, col_name)
 
     with app.app_context():
-        dialect_name = db.engine.dialect.name
-
-        def _ddl_type(type_name: str) -> str:
-            upper = type_name.upper()
-            if dialect_name == 'postgresql' and upper == 'DATETIME':
-                return 'TIMESTAMP'
-            return upper
-
-        def _add_missing_columns(table_name: str, statements: list[tuple[str, str]]) -> None:
-            inspector = inspect(db.engine)
-            existing = {c['name'] for c in inspector.get_columns(table_name)}
-            with db.engine.begin() as conn:
-                for col_name, raw_ddl in statements:
-                    if col_name in existing:
-                        continue
-                    ddl = raw_ddl.replace('DATETIME', _ddl_type('DATETIME'))
-                    conn.execute(db.text(f'ALTER TABLE {table_name} ADD COLUMN {ddl}'))
-                    app.logger.info('Schema bootstrap: added %s.%s', table_name, col_name)
-
         db.create_all()
-
         _add_missing_columns('tasks', [
             ('created_by_user_id', 'created_by_user_id INTEGER'),
             ('created_by_name', 'created_by_name VARCHAR(120)'),
@@ -92,28 +82,13 @@ def _ensure_runtime_schema(app: Flask) -> None:
             ('completed_by_name', 'completed_by_name VARCHAR(120)'),
             ('completed_by_email', 'completed_by_email VARCHAR(200)'),
         ])
-
-        _add_missing_columns('task_categories', [
-            ('created_at', 'created_at DATETIME'),
-        ])
-
         _add_missing_columns('task_events', [
             ('actor_name', 'actor_name VARCHAR(120)'),
             ('actor_email', 'actor_email VARCHAR(200)'),
         ])
-
         _add_missing_columns('task_recipient_responses', [
             ('created_at', 'created_at DATETIME'),
-            ('reminder_2d_sent_at', 'reminder_2d_sent_at DATETIME'),
-            ('reminder_1d_sent_at', 'reminder_1d_sent_at DATETIME'),
-            ('reminder_0d_sent_at', 'reminder_0d_sent_at DATETIME'),
-            ('reminder_2d_for_due_date', 'reminder_2d_for_due_date DATE'),
-            ('reminder_1d_for_due_date', 'reminder_1d_for_due_date DATE'),
-            ('reminder_0d_for_due_date', 'reminder_0d_for_due_date DATE'),
         ])
-
-        # task_attachments è una tabella nuova creata da db.create_all(); nessun ALTER necessario qui.
-        # task_attachments è una tabella nuova creata da db.create_all(); nessun ALTER necessario qui.
 
 
 def create_app() -> Flask:
@@ -215,9 +190,6 @@ def create_app() -> Flask:
     app.register_blueprint(tasks_bp, url_prefix='/tasks')
     app.register_blueprint(aste_bp, url_prefix='/aste')
 
-    # Allinea lo schema runtime anche in produzione per evitare mismatch tra codice e DB.
-    _ensure_runtime_schema(app)
-
     # Bootstrap opzionale del DB; in produzione usare Flask-Migrate.
     with app.app_context():
         if app.config.get('AUTO_DB_BOOTSTRAP', False):
@@ -225,7 +197,7 @@ def create_app() -> Flask:
             _run_legacy_bootstrap_migrations(app)
             _seed_default_categories()
         else:
-            app.logger.info('AUTO_DB_BOOTSTRAP disattivato: applicato comunque runtime schema sync per colonne/tabelle task.')
+            app.logger.info('AUTO_DB_BOOTSTRAP disattivato: uso schema gestito via migration.')
 
     return app
 

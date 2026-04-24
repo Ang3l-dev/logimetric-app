@@ -395,9 +395,6 @@ class Task(db.Model):
                                            order_by='TaskEvent.created_at')
     recipient_responses  = db.relationship('TaskRecipientResponse', back_populates='task',
                                            cascade='all, delete-orphan', lazy='dynamic')
-    attachments          = db.relationship('TaskAttachment', back_populates='task',
-                                           cascade='all, delete-orphan', lazy='dynamic',
-                                           order_by='TaskAttachment.created_at')
 
     @property
     def is_overdue(self) -> bool:
@@ -524,12 +521,6 @@ class TaskRecipientResponse(db.Model):
     status          = db.Column(db.String(20), default='da_fare')
     note            = db.Column(db.Text)
     replied_by      = db.Column(db.String(200))   # nome libero opzionale
-    reminder_2d_sent_at = db.Column(db.DateTime)
-    reminder_1d_sent_at = db.Column(db.DateTime)
-    reminder_0d_sent_at = db.Column(db.DateTime)
-    reminder_2d_for_due_date = db.Column(db.Date)
-    reminder_1d_for_due_date = db.Column(db.Date)
-    reminder_0d_for_due_date = db.Column(db.Date)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at      = db.Column(db.DateTime, default=datetime.utcnow,
                                 onupdate=datetime.utcnow)
@@ -552,32 +543,6 @@ class TaskEvent(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     task = db.relationship('Task', back_populates='events')
-
-
-class TaskAttachment(db.Model):
-    __tablename__ = 'task_attachments'
-
-    id               = db.Column(db.Integer, primary_key=True)
-    task_id          = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=False, index=True)
-    event_id         = db.Column(db.Integer, db.ForeignKey('task_events.id'))
-    attachment_scope = db.Column(db.String(20), default='task', nullable=False)  # task|response
-    link_url         = db.Column(db.Text, nullable=False)
-    link_label       = db.Column(db.String(255))
-    storage_provider = db.Column(db.String(50), default='onedrive')
-    added_by_name    = db.Column(db.String(120))
-    added_by_email   = db.Column(db.String(200), index=True)
-    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
-
-    task = db.relationship('Task', back_populates='attachments')
-    event = db.relationship('TaskEvent', backref=db.backref('attachments', lazy='dynamic', cascade='all, delete-orphan'))
-
-    @property
-    def display_label(self) -> str:
-        return (self.link_label or '').strip() or self.link_url
-
-    def __repr__(self):
-        return f'<TaskAttachment #{self.id} task={self.task_id} scope={self.attachment_scope}>'
-
 
 
 class TaskHelperRequest(db.Model):

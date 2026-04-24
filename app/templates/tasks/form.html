@@ -83,14 +83,6 @@
         <input id="due_date" name="due_date" type="date" class="input"
                value="{{ task.due_date.isoformat() if task and task.due_date else '' }}">
       </div>
-
-      <div class="field field-span-2">
-        <label for="attachment_links">Allegati OneDrive / SharePoint <span class="label-hint">(opzionale)</span></label>
-        <textarea id="attachment_links" name="attachment_links" class="input textarea" rows="4"
-                  placeholder="Una riga per allegato. Formato consigliato: Etichetta | https://...">{% if task %}{% for att in task.attachments.filter_by(attachment_scope='task').all() %}{{ att.display_label }} | {{ att.link_url }}{% if not loop.last %}
-{% endif %}{% endfor %}{% endif %}</textarea>
-        <div class="text-muted" style="font-size:.78rem;margin-top:6px">Usa link condivisi sicuri OneDrive/SharePoint. Gli allegati vengono mostrati nel task e nelle notifiche collegate.</div>
-      </div>
     </div>
 
     <div style="display:flex;gap:12px;margin-top:24px;align-items:center">
