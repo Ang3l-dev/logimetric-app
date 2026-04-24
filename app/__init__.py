@@ -62,28 +62,28 @@ def _ensure_runtime_schema(app: Flask) -> None:
     from sqlalchemy import inspect
     from .models import Task, TaskEvent, TaskRecipientResponse, TaskCategory, TaskAttachment
 
-    dialect_name = db.engine.dialect.name
-
-    def _ddl_type(type_name: str) -> str:
-        upper = type_name.upper()
-        if dialect_name == 'postgresql':
-            if upper == 'DATETIME':
-                return 'TIMESTAMP'
-        return upper
-
-    def _add_missing_columns(table_name: str, statements: list[tuple[str, str]]) -> None:
-        inspector = inspect(db.engine)
-        existing = {c['name'] for c in inspector.get_columns(table_name)}
-        with db.engine.begin() as conn:
-            for col_name, raw_ddl in statements:
-                if col_name in existing:
-                    continue
-                ddl = raw_ddl.replace('DATETIME', _ddl_type('DATETIME'))
-                conn.execute(db.text(f'ALTER TABLE {table_name} ADD COLUMN {ddl}'))
-                app.logger.info('Schema bootstrap: added %s.%s', table_name, col_name)
-
     with app.app_context():
+        dialect_name = db.engine.dialect.name
+
+        def _ddl_type(type_name: str) -> str:
+            upper = type_name.upper()
+            if dialect_name == 'postgresql' and upper == 'DATETIME':
+                return 'TIMESTAMP'
+            return upper
+
+        def _add_missing_columns(table_name: str, statements: list[tuple[str, str]]) -> None:
+            inspector = inspect(db.engine)
+            existing = {c['name'] for c in inspector.get_columns(table_name)}
+            with db.engine.begin() as conn:
+                for col_name, raw_ddl in statements:
+                    if col_name in existing:
+                        continue
+                    ddl = raw_ddl.replace('DATETIME', _ddl_type('DATETIME'))
+                    conn.execute(db.text(f'ALTER TABLE {table_name} ADD COLUMN {ddl}'))
+                    app.logger.info('Schema bootstrap: added %s.%s', table_name, col_name)
+
         db.create_all()
+
         _add_missing_columns('tasks', [
             ('created_by_user_id', 'created_by_user_id INTEGER'),
             ('created_by_name', 'created_by_name VARCHAR(120)'),
@@ -92,13 +92,16 @@ def _ensure_runtime_schema(app: Flask) -> None:
             ('completed_by_name', 'completed_by_name VARCHAR(120)'),
             ('completed_by_email', 'completed_by_email VARCHAR(200)'),
         ])
+
         _add_missing_columns('task_categories', [
             ('created_at', 'created_at DATETIME'),
         ])
+
         _add_missing_columns('task_events', [
             ('actor_name', 'actor_name VARCHAR(120)'),
             ('actor_email', 'actor_email VARCHAR(200)'),
         ])
+
         _add_missing_columns('task_recipient_responses', [
             ('created_at', 'created_at DATETIME'),
             ('reminder_2d_sent_at', 'reminder_2d_sent_at DATETIME'),
@@ -108,6 +111,8 @@ def _ensure_runtime_schema(app: Flask) -> None:
             ('reminder_1d_for_due_date', 'reminder_1d_for_due_date DATE'),
             ('reminder_0d_for_due_date', 'reminder_0d_for_due_date DATE'),
         ])
+
+        # task_attachments è una tabella nuova creata da db.create_all(); nessun ALTER necessario qui.
         # task_attachments è una tabella nuova creata da db.create_all(); nessun ALTER necessario qui.
 
 
