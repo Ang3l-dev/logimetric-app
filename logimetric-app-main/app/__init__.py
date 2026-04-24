@@ -62,13 +62,23 @@ def _ensure_runtime_schema(app: Flask) -> None:
     from sqlalchemy import inspect
     from .models import Task, TaskEvent, TaskRecipientResponse, TaskCategory, TaskAttachment
 
-    def _add_missing_columns(table_name: str, statements: list[str]) -> None:
+    dialect_name = db.engine.dialect.name
+
+    def _ddl_type(type_name: str) -> str:
+        upper = type_name.upper()
+        if dialect_name == 'postgresql':
+            if upper == 'DATETIME':
+                return 'TIMESTAMP'
+        return upper
+
+    def _add_missing_columns(table_name: str, statements: list[tuple[str, str]]) -> None:
         inspector = inspect(db.engine)
         existing = {c['name'] for c in inspector.get_columns(table_name)}
         with db.engine.begin() as conn:
-            for col_name, ddl in statements:
+            for col_name, raw_ddl in statements:
                 if col_name in existing:
                     continue
+                ddl = raw_ddl.replace('DATETIME', _ddl_type('DATETIME'))
                 conn.execute(db.text(f'ALTER TABLE {table_name} ADD COLUMN {ddl}'))
                 app.logger.info('Schema bootstrap: added %s.%s', table_name, col_name)
 
