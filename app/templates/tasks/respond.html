@@ -86,6 +86,17 @@
         {{ task.description }}
       </p>
       {% endif %}
+      {% set opening_attachments = task.attachments.filter_by(attachment_scope='task').all() %}
+      {% if opening_attachments %}
+      <div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:12px">
+        <div style="font-size:11px;color:#7a90b0;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Allegati task</div>
+        <ul style="margin:0;padding-left:18px;color:#aab9d1;font-size:.86rem">
+          {% for att in opening_attachments %}
+          <li style="margin-bottom:6px"><a href="{{ att.link_url }}" target="_blank" style="color:#7cc7ff;text-decoration:none">{{ att.display_label }}</a> <span style="color:#4a5c78">[{{ att.storage_provider|upper }}]</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
     </div>
 
     <form method="post" action="{{ url_for('tasks.respond_submit', token=task.external_token) }}">
@@ -114,6 +125,12 @@
         <label for="note">Note / aggiornamento</label>
         <textarea id="note" name="note" class="input"
                   placeholder="Descrivi lo stato di avanzamento, eventuali problemi o date stimate…"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="attachment_links">Allegati risposta <span style="color:var(--muted)">(link OneDrive/SharePoint)</span></label>
+        <textarea id="attachment_links" name="attachment_links" class="input"
+                  placeholder="Una riga per allegato. Formato: Etichetta | https://..." style="min-height:78px"></textarea>
       </div>
 
       <button type="submit" class="btn">Invia aggiornamento</button>

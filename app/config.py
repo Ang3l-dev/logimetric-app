@@ -62,6 +62,7 @@ class Config:
     CRON_SECRET = os.environ.get('CRON_SECRET', '')
     POWERAPP_URL = os.environ.get('POWERAPP_URL', '')
     POWERAPP_TASK_ID_PARAM = os.environ.get('POWERAPP_TASK_ID_PARAM', 'task_id')
+    POWERAPP_TASK_TOKEN_PARAM = os.environ.get('POWERAPP_TASK_TOKEN_PARAM', 'task_token')
     RESET_TOKEN_MAX_AGE = int(os.environ.get('RESET_TOKEN_MAX_AGE', '3600'))
 
     # Telegram notifiche task

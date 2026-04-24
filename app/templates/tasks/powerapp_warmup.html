@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apertura Task — LogiMetric</title>
+  <style>
+    :root { --bg:#07111f; --card:#0f1e38; --line:rgba(255,255,255,.08); --text:#edf3fb; --muted:#7a90b0; --primary:#1fa3ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; padding:20px; background:var(--bg); color:var(--text); font-family:Inter, Arial, sans-serif; }
+    .card { width:min(560px,100%); background:var(--card); border:1px solid var(--line); border-radius:18px; padding:28px; }
+    .spinner { width:46px; height:46px; border-radius:50%; border:4px solid rgba(255,255,255,.08); border-top-color:var(--primary); animation:spin 1s linear infinite; margin-bottom:18px; }
+    .muted { color:var(--muted); line-height:1.6; }
+    .ok { color:#7cc7ff; }
+    .fallback { margin-top:18px; font-size:.9rem; }
+    a { color:#7cc7ff; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <h1 style="margin:0 0 10px;font-size:1.4rem">Sto preparando il task #{{ task.id }}</h1>
+    <p id="status" class="muted">Un attimo: verifico che l'app sia pronta e poi apro automaticamente il task in Power App.</p>
+    <p class="muted">Titolo: <strong class="ok">{{ task.title }}</strong></p>
+    <div class="fallback">
+      Se il reindirizzamento automatico non parte, <a href="{{ deep_link }}" id="manualLink">clicca qui</a>.
+    </div>
+  </div>
+  <script>
+    const deepLink = {{ deep_link|tojson }};
+    const warmupUrl = {{ url_for('tasks.api_warmup', task_id=task.id, task_token=task.external_token)|tojson }};
+    const statusEl = document.getElementById('status');
+    async function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
+    async function start() {
+      const startedAt = Date.now();
+      for (let attempt = 1; attempt <= 10; attempt++) {
+        try {
+          statusEl.textContent = `Contatto il server (${attempt}/10)…`;
+          const resp = await fetch(warmupUrl, { credentials: 'same-origin', cache: 'no-store' });
+          const data = await resp.json();
+          if (resp.ok && data.ok) {
+            statusEl.textContent = 'Server pronto. Apro il task…';
+            await sleep(350);
+            window.location.replace(deepLink);
+            return;
+          }
+        } catch (err) {
+          // ignore and retry
+        }
+        await sleep(1200);
+      }
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      statusEl.innerHTML = `Il server sta ancora terminando l'avvio (${elapsed}s). Puoi attendere qualche secondo oppure usare il link manuale qui sotto.`;
+    }
+    start();
+  </script>
+</body>
+</html>

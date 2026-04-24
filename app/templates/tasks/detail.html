@@ -115,6 +115,20 @@
   </div>
   {% endif %}
 
+  {% set task_attachments = task.attachments.filter_by(attachment_scope='task').all() %}
+  {% if task_attachments %}
+  <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--line)">
+    <div class="detail-label" style="margin-bottom:8px">Allegati task</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      {% for att in task_attachments %}
+      <a href="{{ att.link_url }}" target="_blank" style="padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg-card-alt);text-decoration:none;color:#7cc7ff">
+        {{ att.display_label }} <span class="text-muted" style="font-size:.78rem">[{{ att.storage_provider|upper }}]</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   {# Cambio stato rapido #}
   <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--line)">
     <div class="detail-label" style="margin-bottom:10px">Cambia stato</div>
@@ -253,7 +267,15 @@
         </span>
         {% endif %}
         {% if ev.note %}
-        <div style="font-size:.78rem;color:var(--muted);margin-top:3px">{{ ev.note }}</div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:3px;white-space:pre-wrap">{{ ev.note }}</div>
+        {% endif %}
+        {% set ev_attachments = ev.attachments.all() if ev.attachments is defined else [] %}
+        {% if ev_attachments %}
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+          {% for att in ev_attachments %}
+          <a href="{{ att.link_url }}" target="_blank" style="font-size:.78rem;color:#7cc7ff;text-decoration:none">📎 {{ att.display_label }}</a>
+          {% endfor %}
+        </div>
         {% endif %}
       </div>
     </div>
