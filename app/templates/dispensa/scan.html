@@ -185,6 +185,29 @@ let currentBase64 = null;
 let ollamaOk = false;
 let visionModel = null;
 
+/* ── Compressione immagine ── */
+function compressImage(base64, maxPx, quality) {
+  return new Promise(function(resolve) {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else       { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      // Aumenta contrasto per testo su carta termica
+      ctx.filter = 'contrast(1.3) brightness(1.1)';
+      ctx.drawImage(img, 0, 0, w, h);
+      var dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(dataUrl.split(',')[1]);
+    };
+    img.src = 'data:image/jpeg;base64,' + base64;
+  });
+}
+
 /* ── Ollama detection ── */
 function isVisionModel(name) {
   return name.includes('llava') || name.includes('moondream') ||
@@ -194,11 +217,14 @@ function isVisionModel(name) {
 
 function setOllamaOk(models) {
   const bar = document.getElementById('ollama-bar');
-  const visionModels = models.filter(function(m) {
+  var allVision = models.filter(function(m) {
     return isVisionModel(m) && !m.includes('cloud');
   });
-  if (visionModels.length > 0) {
-    visionModel = visionModels[0];
+  var preferred = allVision.find(function(m) { return m.includes('qwen3-vl'); }) ||
+                  allVision.find(function(m) { return m.includes('llava'); }) ||
+                  allVision[0] || null;
+  if (preferred) {
+    visionModel = preferred;
   } else {
     visionModel = null;
     for (var i = 0; i < models.length; i++) {
@@ -331,7 +357,7 @@ Rispondi SOLO con il JSON.`;
     };
     // Aggiungi immagine per modelli vision
     if (visionModel && isVisionModel(visionModel)) {
-      body.images = [currentBase64];
+      body.images = [compressedBase64];
     }
 
     const r = await fetch(OLLAMA + '/api/generate', {
