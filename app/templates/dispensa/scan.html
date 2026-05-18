@@ -232,16 +232,21 @@ function setOllamaKo() {
 async function checkOllama() {
   var bar = document.getElementById('ollama-bar');
   bar.className = 'status-bar warn';
-  bar.innerHTML = '⏳ Verifica Ollama...';
+  bar.innerHTML = '⏳ [1] Avvio check Ollama...';
   try {
     var ctrl = new AbortController();
-    var timer = setTimeout(function() { ctrl.abort(); }, 5000);
+    var timer = setTimeout(function() { ctrl.abort(); }, 8000);
+    bar.innerHTML = '⏳ [2] Fetch in corso verso ' + OLLAMA + '...';
     var r = await fetch(OLLAMA + '/api/tags', { signal: ctrl.signal });
+    bar.innerHTML = '⏳ [3] Risposta ricevuta: HTTP ' + r.status;
     clearTimeout(timer);
     var data = await r.json();
+    bar.innerHTML = '⏳ [4] JSON OK: ' + (data.models || []).length + ' modelli trovati';
     var models = (data.models || []).map(function(m) { return m.name; });
     setOllamaOk(models);
   } catch(e) {
+    bar.className = 'status-bar error';
+    bar.innerHTML = '❌ Errore al check: ' + e.name + ' — ' + e.message;
     setOllamaKo();
   }
 }
