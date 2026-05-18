@@ -77,10 +77,7 @@
 </div>
 
 {# Stato Ollama #}
-<div id="ollama-bar" class="status-bar warn">
-  <div class="spinner"></div>
-  Controllo Ollama in corso...
-</div>
+<div id="ollama-bar" class="status-bar warn">⏳ Verifica Ollama...</div>
 
 {# Modello disponibile #}
 <div id="model-info" style="display:none;margin-bottom:16px;font-size:.83rem;color:var(--muted)">
@@ -192,64 +189,73 @@ let visionModel = null;
 function isVisionModel(name) {
   return name.includes('llava') || name.includes('moondream') ||
          name.includes('vision') || name.includes('bakllava') ||
-         name.includes('-vl') || name.includes(':vl') || name.includes('qwen3-vl');
+         name.includes('-vl') || name.includes('vl:') || name.includes('qwen3-vl');
 }
 
-async function checkOllama(retries = 3) {
+function setOllamaOk(models) {
   const bar = document.getElementById('ollama-bar');
-  const fallback = document.getElementById('manual-fallback');
-  const btn = document.getElementById('analyze-btn');
-
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      bar.className = 'status-bar loading';
-      bar.innerHTML = attempt > 1
-        ? `<div class="spinner"></div> Connessione a Ollama (tentativo ${attempt}/${retries})...`
-        : '<div class="spinner"></div> Connessione a Ollama...';
-
-      const r = await fetch(OLLAMA + '/api/tags', { signal: AbortSignal.timeout(6000) });
-      if (!r.ok) throw new Error('not ok');
-      const data = await r.json();
-      const models = (data.models || []).map(m => m.name);
-
-      // Priorità modelli vision locali (esclude cloud)
-      const visionModels = models.filter(m => isVisionModel(m) && !m.includes('cloud'));
-      if (visionModels.length > 0) {
-        visionModel = visionModels[0];
-        document.getElementById('model-name').textContent = visionModel;
-        document.getElementById('model-info').style.display = '';
-      } else {
-        // Fallback testo
-        visionModel = models.find(m =>
-          !m.includes('cloud') && !m.includes('embedding') &&
-          (m.includes('mistral') || m.includes('llama') || m.includes('qwen') || m.includes('gemma'))
-        ) || null;
-        if (visionModel) {
-          document.getElementById('model-name').textContent = visionModel + ' (testo — qualità scan ridotta)';
-          document.getElementById('model-info').style.display = '';
-        }
+  const visionModels = models.filter(function(m) {
+    return isVisionModel(m) && !m.includes('cloud');
+  });
+  if (visionModels.length > 0) {
+    visionModel = visionModels[0];
+  } else {
+    visionModel = null;
+    for (var i = 0; i < models.length; i++) {
+      var m = models[i];
+      if (!m.includes('cloud') && !m.includes('embedding') &&
+          (m.includes('mistral') || m.includes('llama') || m.includes('qwen') || m.includes('gemma'))) {
+        visionModel = m;
+        break;
       }
-
-      ollamaOk = true;
-      bar.className = 'status-bar ok';
-      bar.innerHTML = '🟢 Ollama attivo — scan scontrino disponibile';
-      if (btn) { btn.disabled = false; btn.textContent = '🔍 Analizza con IA'; }
-      return true;
-
-    } catch {
-      if (attempt < retries) await new Promise(res => setTimeout(res, 1500));
     }
   }
-
-  // Tutti i tentativi falliti
-  ollamaOk = false;
-  bar.className = 'status-bar warn';
-  bar.innerHTML = '🟡 Ollama non risponde. <a href="#" onclick="retryOllama();return false;" style="color:inherit;font-weight:700;text-decoration:underline">🔄 Riprova</a> &nbsp;|&nbsp; sei fuori casa? usa l'inserimento manuale.';
-  if (fallback) fallback.style.display = '';
-  return false;
+  if (visionModel) {
+    var label = isVisionModel(visionModel) ? visionModel : visionModel + ' (testo)';
+    document.getElementById('model-name').textContent = label;
+    document.getElementById('model-info').style.display = '';
+  }
+  ollamaOk = true;
+  bar.className = 'status-bar ok';
+  bar.innerHTML = '🟢 Ollama attivo';
 }
 
-async function retryOllama() { ollamaOk = false; await checkOllama(2); }
+function setOllamaKo() {
+  var bar = document.getElementById('ollama-bar');
+  ollamaOk = false;
+  bar.className = 'status-bar warn';
+  bar.innerHTML = '🟡 Ollama non raggiungibile (sei fuori casa?) — puoi comunque inserire manualmente';
+  var f = document.getElementById('manual-fallback');
+  if (f) f.style.display = '';
+}
+
+function checkOllama() {
+  var bar = document.getElementById('ollama-bar');
+  bar.className = 'status-bar warn';
+  bar.innerHTML = '⏳ Verifica Ollama...';
+
+  var xhr = new XMLHttpRequest();
+  xhr.timeout = 5000;
+  xhr.open('GET', OLLAMA + '/api/tags', true);
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      try {
+        var data = JSON.parse(xhr.responseText);
+        var models = (data.models || []).map(function(m) { return m.name; });
+        setOllamaOk(models);
+      } catch(e) {
+        setOllamaKo();
+      }
+    } else {
+      setOllamaKo();
+    }
+  };
+  xhr.onerror = function() { setOllamaKo(); };
+  xhr.ontimeout = function() { setOllamaKo(); };
+  xhr.send();
+}
+
+function retryOllama() { ollamaOk = false; checkOllama(); }
 
 /* ── File input ── */
 function triggerFileInput() {
@@ -293,10 +299,10 @@ function loadFile(file) {
 async function analyzeReceipt() {
   if (!currentBase64) { alert('Carica prima uno scontrino.'); return; }
 
-  // Se Ollama non era ok, riprova prima di arrendersi
+  // Tenta la chiamata anche se il check iniziale non era ok
   if (!ollamaOk) {
-    const ok = await checkOllama(2);
-    if (!ok) { showManualItems(); return; }
+    // Prova comunque - potrebbe essere diventato disponibile
+    console.log('Ollama non verificato, tentativo diretto...');
   }
 
   const btn = document.getElementById('analyze-btn');
