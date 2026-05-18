@@ -394,12 +394,11 @@ Rispondi SOLO con il JSON.`;
     }
 
   } catch(e) {
-    // Se la chiamata fallisce, aggiorna il banner
     const bar = document.getElementById('ollama-bar');
     bar.className = 'status-bar warn';
     bar.innerHTML = '🟡 Ollama non risponde. <a href="#" onclick="retryOllama();return false;" style="color:inherit;font-weight:700;text-decoration:underline">🔄 Riprova</a>';
     ollamaOk = false;
-    status.innerHTML = '<span style="color:var(--danger)">❌ Errore comunicazione con Ollama. Riprova o inserisci manualmente.</span>';
+    status.innerHTML = `<span style="color:var(--danger)">❌ Errore: ${e.name} — ${e.message}</span>`;
     showManualItems();
   } finally {
     btn.disabled = false;
