@@ -229,30 +229,21 @@ function setOllamaKo() {
   if (f) f.style.display = '';
 }
 
-function checkOllama() {
+async function checkOllama() {
   var bar = document.getElementById('ollama-bar');
   bar.className = 'status-bar warn';
   bar.innerHTML = '⏳ Verifica Ollama...';
-
-  var xhr = new XMLHttpRequest();
-  xhr.timeout = 5000;
-  xhr.open('GET', OLLAMA + '/api/tags', true);
-  xhr.onload = function() {
-    if (xhr.status === 200) {
-      try {
-        var data = JSON.parse(xhr.responseText);
-        var models = (data.models || []).map(function(m) { return m.name; });
-        setOllamaOk(models);
-      } catch(e) {
-        setOllamaKo();
-      }
-    } else {
-      setOllamaKo();
-    }
-  };
-  xhr.onerror = function() { setOllamaKo(); };
-  xhr.ontimeout = function() { setOllamaKo(); };
-  xhr.send();
+  try {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function() { ctrl.abort(); }, 5000);
+    var r = await fetch(OLLAMA + '/api/tags', { signal: ctrl.signal });
+    clearTimeout(timer);
+    var data = await r.json();
+    var models = (data.models || []).map(function(m) { return m.name; });
+    setOllamaOk(models);
+  } catch(e) {
+    setOllamaKo();
+  }
 }
 
 function retryOllama() { ollamaOk = false; checkOllama(); }
