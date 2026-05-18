@@ -1,0 +1,431 @@
+{% extends 'base.html' %}
+{% block title %}Dispensa — LogiMetric{% endblock %}
+
+{% block head %}
+<style>
+/* ── Dispensa-specific styles ────────────────────────────────────────────── */
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 14px; margin-bottom: 24px; }
+.kpi-box { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+.kpi-box .val { font-size: 1.8rem; font-weight: 800; letter-spacing: -.03em; color: var(--text); }
+.kpi-box .lbl { font-size: .78rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .06em; }
+.kpi-box.kpi-warn .val { color: var(--warning); }
+.kpi-box.kpi-ok   .val { color: var(--success); }
+.kpi-box.kpi-blue .val { color: var(--primary); }
+
+.two-col { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
+@media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
+
+.stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap: 12px; }
+.stock-card {
+  background: var(--bg-card-alt); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: border-color .15s;
+}
+.stock-card:hover { border-color: rgba(255,255,255,.18); }
+.stock-card.low   { border-color: rgba(245,166,35,.35); background: rgba(245,166,35,.04); }
+.stock-card.empty { border-color: rgba(224,92,92,.35); background: rgba(224,92,92,.04); }
+.stock-name  { font-weight: 600; font-size: .92rem; }
+.stock-cat   { font-size: .75rem; color: var(--muted); }
+.stock-qty   { font-size: 1.3rem; font-weight: 800; letter-spacing:-.02em; }
+.stock-qty span { font-size: .8rem; font-weight: 400; color: var(--muted); margin-left: 3px; }
+.qty-controls { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.qty-btn {
+  width: 26px; height: 26px; border-radius: var(--radius-xs);
+  border: 1px solid var(--line); background: var(--bg-soft);
+  color: var(--text); font-size: 1rem; display: grid; place-items: center;
+  cursor: pointer; transition: all .15s;
+}
+.qty-btn:hover { border-color: var(--primary); color: var(--primary); }
+.qty-input {
+  width: 54px; text-align: center; padding: 4px 6px;
+  border-radius: var(--radius-xs); border: 1px solid var(--line);
+  background: var(--bg-soft); color: var(--text); font-size: .9rem;
+}
+
+.alert-strip { display: flex; flex-direction: column; gap: 8px; }
+.alert-item {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(245,166,35,.08); border: 1px solid rgba(245,166,35,.25);
+  border-radius: var(--radius-sm); padding: 10px 14px; gap: 12px;
+}
+.alert-item.empty-alert {
+  background: rgba(224,92,92,.08); border-color: rgba(224,92,92,.25);
+}
+.alert-name  { font-size: .9rem; font-weight: 600; }
+.alert-qty   { font-size: .8rem; color: var(--muted); }
+.alert-badge {
+  font-size: .72rem; font-weight: 700; padding: 3px 8px;
+  border-radius: 20px; white-space: nowrap;
+  background: rgba(245,166,35,.2); color: var(--warning);
+}
+.alert-badge.danger { background: rgba(224,92,92,.2); color: var(--danger); }
+
+.quick-add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.quick-add-row .input { flex: 1; min-width: 120px; }
+
+.recent-list { display: flex; flex-direction: column; gap: 8px; }
+.recent-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--line-soft); gap: 12px;
+}
+.recent-item:last-child { border-bottom: none; }
+.recent-name { font-size: .9rem; font-weight: 500; }
+.recent-meta { font-size: .78rem; color: var(--muted); }
+.recent-price { font-size: .9rem; font-weight: 600; color: var(--success); white-space: nowrap; }
+
+.cat-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.cat-pill {
+  padding: 5px 12px; border-radius: 20px; font-size: .8rem; font-weight: 600;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  cursor: pointer; transition: all .15s;
+}
+.cat-pill:hover, .cat-pill.active {
+  background: rgba(31,163,255,.12); border-color: rgba(31,163,255,.3); color: var(--primary);
+}
+
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.section-title  { font-size: 1rem; font-weight: 700; margin: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>🛒 Dispensa</h1>
+    <p class="page-subtitle">Gestione scorte, acquisti e previsioni con IA locale</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    {% if current_user.can_write('dispensa') %}
+    <a href="{{ url_for('dispensa.scan') }}" class="btn btn-primary">📷 Scansiona scontrino</a>
+    {% endif %}
+    <a href="{{ url_for('dispensa.reports') }}" class="btn btn-outline">📊 Report</a>
+  </div>
+</div>
+
+{# ── KPI strip ── #}
+<div class="kpi-strip">
+  <div class="kpi-box kpi-blue">
+    <div class="val">{{ stocks|length }}</div>
+    <div class="lbl">Prodotti in dispensa</div>
+  </div>
+  <div class="kpi-box {% if alerts %}kpi-warn{% else %}kpi-ok{% endif %}">
+    <div class="val">{{ alerts|length }}</div>
+    <div class="lbl">Prodotti in esaurimento</div>
+  </div>
+  <div class="kpi-box">
+    <div class="val">€ {{ "%.2f"|format(month_spend) }}</div>
+    <div class="lbl">Speso questo mese</div>
+  </div>
+  <div class="kpi-box">
+    <div class="val">{{ recent|length }}</div>
+    <div class="lbl">Ultimi acquisti</div>
+  </div>
+</div>
+
+<div class="two-col">
+
+  {# ── Colonna sinistra: stock ── #}
+  <div>
+    {# Alert esaurimento #}
+    {% if alerts %}
+    <div class="card card-alert" style="margin-bottom:20px">
+      <div class="section-header">
+        <h3 class="section-title">⚠️ Prodotti in esaurimento</h3>
+        <a href="{{ url_for('dispensa.scan') }}" class="btn btn-sm btn-outline">Aggiungi acquisto</a>
+      </div>
+      <div class="alert-strip">
+        {% for stock, prod in alerts %}
+        <div class="alert-item {% if stock.quantity_current == 0 %}empty-alert{% endif %}">
+          <div>
+            <div class="alert-name">{{ prod.name }}</div>
+            <div class="alert-qty">{{ stock.quantity_current }} {{ prod.unit }} (min: {{ stock.quantity_min }})</div>
+          </div>
+          <span class="alert-badge {% if stock.quantity_current == 0 %}danger{% endif %}">
+            {% if stock.quantity_current == 0 %}Esaurito{% else %}Scarso{% endif %}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# Stock completo #}
+    <div class="card">
+      <div class="section-header">
+        <h3 class="section-title">Scorte attuali</h3>
+        {% if current_user.can_write('dispensa') %}
+        <button class="btn btn-sm btn-outline" onclick="toggleQuickAdd()">+ Aggiungi rapido</button>
+        {% endif %}
+      </div>
+
+      {# Quick add form #}
+      <div id="quick-add-form" style="display:none; margin-bottom:18px; padding:16px; background:var(--bg-soft); border-radius:var(--radius-sm); border:1px solid var(--line);">
+        <div style="font-weight:600; margin-bottom:12px; font-size:.9rem;">Aggiunta rapida prodotto</div>
+        <div class="quick-add-row">
+          <input id="qa-name"  class="input" placeholder="Nome prodotto" style="flex:2">
+          <input id="qa-qty"   class="input" type="number" min="0" step="0.1" placeholder="Quantità" style="width:100px;flex:none">
+          <select id="qa-unit" class="input" style="width:80px;flex:none">
+            {% for u in units %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+          </select>
+          <select id="qa-cat" class="input" style="flex:1.5">
+            {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
+          <input id="qa-price" class="input" type="number" min="0" step="0.01" placeholder="€ Prezzo" style="width:100px;flex:none">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="quickAdd()">Salva acquisto</button>
+          <button class="btn btn-sm btn-outline" onclick="toggleQuickAdd()">Annulla</button>
+        </div>
+      </div>
+
+      {# Filtro categorie #}
+      <div class="cat-filter" id="cat-filter">
+        <button class="cat-pill active" data-cat="all" onclick="filterCat(this,'all')">Tutto</button>
+        {% set cats = stocks | map(attribute=1) | map(attribute='category') | unique | list %}
+        {% for cat in cats %}
+        <button class="cat-pill" data-cat="{{ cat }}" onclick="filterCat(this,'{{ cat }}')">{{ cat }}</button>
+        {% endfor %}
+      </div>
+
+      {% if stocks %}
+      <div class="stock-grid" id="stock-grid">
+        {% for stock, prod in stocks %}
+        <div class="stock-card {% if stock.quantity_current == 0 %}empty{% elif stock.is_low %}low{% endif %}"
+             data-cat="{{ prod.category }}" data-stock-id="{{ stock.id }}" data-prod-id="{{ prod.id }}" data-unit="{{ prod.unit }}">
+          <div>
+            <div class="stock-name">{{ prod.name }}</div>
+            <div class="stock-cat">{{ prod.category }}</div>
+          </div>
+          <div class="stock-qty">
+            <span id="qty-display-{{ stock.id }}">{{ stock.quantity_current }}</span>
+            <span>{{ prod.unit }}</span>
+          </div>
+          {% if current_user.can_write('dispensa') %}
+          <div class="qty-controls">
+            <button class="qty-btn" onclick="changeQty({{ stock.id }}, {{ prod.id }}, -1, '{{ prod.unit }}')">−</button>
+            <input class="qty-input" type="number" min="0" step="0.5"
+                   value="{{ stock.quantity_current }}" id="qty-inp-{{ stock.id }}"
+                   onchange="saveQty({{ stock.id }}, this.value)">
+            <button class="qty-btn" onclick="changeQty({{ stock.id }}, {{ prod.id }}, 1, '{{ prod.unit }}')">+</button>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div style="font-size:2.5rem;margin-bottom:12px">🛒</div>
+        <div style="font-size:1.1rem;font-weight:600;margin-bottom:6px">Dispensa vuota</div>
+        <p style="color:var(--muted);margin:0 0 16px">Scansiona il tuo primo scontrino per iniziare a tracciare gli acquisti.</p>
+        <a href="{{ url_for('dispensa.scan') }}" class="btn btn-primary">📷 Scansiona scontrino</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Colonna destra: ultimi acquisti + IA suggerimenti ── #}
+  <div>
+
+    {# Previsioni IA #}
+    <div class="card" style="margin-bottom:20px">
+      <div class="section-header">
+        <h3 class="section-title">🤖 Lista della spesa IA</h3>
+        <span id="ollama-status" class="badge" style="font-size:.75rem">⏳ Verifica...</span>
+      </div>
+      <p style="color:var(--muted);font-size:.85rem;margin:0 0 12px">
+        Basata sulle tue abitudini di acquisto degli ultimi 90 giorni.
+      </p>
+      <button class="btn btn-outline btn-full" id="ai-btn" onclick="generateShoppingList()" disabled>
+        Genera lista della spesa
+      </button>
+      <div id="ai-result" style="margin-top:14px"></div>
+    </div>
+
+    {# Ultimi acquisti #}
+    <div class="card">
+      <div class="section-header">
+        <h3 class="section-title">Ultimi acquisti</h3>
+        <a href="{{ url_for('dispensa.reports') }}" class="btn btn-sm btn-outline">Vedi tutto</a>
+      </div>
+      {% if recent %}
+      <div class="recent-list">
+        {% for p in recent %}
+        <div class="recent-item">
+          <div>
+            <div class="recent-name">{{ p.product.name }}</div>
+            <div class="recent-meta">
+              {{ p.purchase_date.strftime('%d/%m/%Y') }}
+              {% if p.store %} · {{ p.store }}{% endif %}
+              · {{ p.quantity }} {{ p.product.unit }}
+            </div>
+          </div>
+          <div class="recent-price">€ {{ "%.2f"|format(p.price_total) }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:.88rem;margin:0">Nessun acquisto registrato.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
+<script>
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+/* ── Filtro categorie ── */
+function filterCat(btn, cat) {
+  document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.stock-card').forEach(card => {
+    card.style.display = (cat === 'all' || card.dataset.cat === cat) ? '' : 'none';
+  });
+}
+
+/* ── Quick add toggle ── */
+function toggleQuickAdd() {
+  const f = document.getElementById('quick-add-form');
+  f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+
+/* ── Quick add submit ── */
+async function quickAdd() {
+  const name  = document.getElementById('qa-name').value.trim();
+  const qty   = parseFloat(document.getElementById('qa-qty').value) || 0;
+  const unit  = document.getElementById('qa-unit').value;
+  const cat   = document.getElementById('qa-cat').value;
+  const price = parseFloat(document.getElementById('qa-price').value) || 0;
+  if (!name || qty <= 0) { alert('Inserisci nome e quantità'); return; }
+  const r = await apiFetch('/dispensa/api/save-purchase', {
+    items: [{ name, quantity: qty, price_total: price, category: cat, unit }],
+    date: new Date().toISOString().split('T')[0],
+  });
+  if (r.ok) { location.reload(); } else { alert('Errore: ' + r.error); }
+}
+
+/* ── Modifica quantità stock ── */
+async function changeQty(stockId, prodId, delta, unit) {
+  const inp = document.getElementById('qty-inp-' + stockId);
+  const newVal = Math.max(0, parseFloat(inp.value || 0) + delta);
+  inp.value = newVal;
+  await saveQty(stockId, newVal);
+}
+
+async function saveQty(stockId, val) {
+  const newVal = Math.max(0, parseFloat(val) || 0);
+  document.getElementById('qty-display-' + stockId).textContent = newVal;
+  const r = await apiFetch('/dispensa/api/stock/update', { stock_id: stockId, qty_current: newVal });
+  const card = document.querySelector(`[data-stock-id="${stockId}"]`);
+  if (card) {
+    card.classList.remove('low', 'empty');
+    if (newVal === 0) card.classList.add('empty');
+  }
+}
+
+async function apiFetch(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+/* ── Ollama check + lista spesa IA ── */
+const OLLAMA_URL = 'http://localhost:11434';
+
+async function checkOllama() {
+  const el = document.getElementById('ollama-status');
+  const btn = document.getElementById('ai-btn');
+  try {
+    const r = await fetch(OLLAMA_URL + '/api/tags', { signal: AbortSignal.timeout(2000) });
+    if (r.ok) {
+      el.textContent = '🟢 Ollama attivo';
+      el.style.color = 'var(--success)';
+      btn.disabled = false;
+      btn.textContent = '✨ Genera lista della spesa';
+      return true;
+    }
+  } catch {}
+  el.textContent = '🔴 Ollama non raggiungibile';
+  el.style.color = 'var(--muted)';
+  btn.textContent = 'Ollama non disponibile (sei in casa?)';
+  return false;
+}
+
+async function generateShoppingList() {
+  const btn = document.getElementById('ai-btn');
+  const resultDiv = document.getElementById('ai-result');
+  btn.disabled = true;
+  btn.textContent = '⏳ Analisi in corso...';
+  resultDiv.innerHTML = '';
+
+  try {
+    // 1. Prendi il contesto storico dal server
+    const ctxResp = await fetch('/dispensa/api/ai/context');
+    const ctx = await ctxResp.json();
+
+    // 2. Costruisci il prompt
+    const prompt = `Sei un assistente per la gestione della dispensa domestica italiana.
+Analizza questi dati di acquisto degli ultimi 90 giorni e genera una lista della spesa per la prossima settimana.
+
+DATI:
+${JSON.stringify(ctx, null, 2)}
+
+Rispondi SOLO con un JSON in questo formato (nessun testo extra):
+{
+  "lista": [
+    {"prodotto": "nome", "quantita": 2, "unita": "kg", "motivo": "breve spiegazione"}
+  ],
+  "note": "nota generale opzionale"
+}`;
+
+    // 3. Chiama Ollama localmente
+    const aiResp = await fetch(OLLAMA_URL + '/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'mistral', prompt, stream: false }),
+    });
+    const aiData = await aiResp.json();
+    const raw = aiData.response || '';
+
+    let parsed;
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+    } catch {
+      resultDiv.innerHTML = `<p style="color:var(--muted);font-size:.85rem">${raw}</p>`;
+      return;
+    }
+
+    // 4. Renderizza la lista
+    const items = parsed.lista || [];
+    if (!items.length) {
+      resultDiv.innerHTML = '<p style="color:var(--success);font-size:.88rem">✅ La dispensa sembra ben fornita!</p>';
+      return;
+    }
+    let html = '<div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">';
+    items.forEach(it => {
+      html += `<div style="padding:10px 12px;background:var(--bg-soft);border-radius:var(--radius-sm);border:1px solid var(--line)">
+        <div style="font-weight:600;font-size:.9rem">${it.prodotto} <span style="font-weight:400;color:var(--muted)">${it.quantita} ${it.unita}</span></div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:2px">${it.motivo}</div>
+      </div>`;
+    });
+    html += '</div>';
+    if (parsed.note) html += `<p style="font-size:.8rem;color:var(--muted);margin:10px 0 0">${parsed.note}</p>`;
+    resultDiv.innerHTML = html;
+
+  } catch(e) {
+    resultDiv.innerHTML = '<p style="color:var(--danger);font-size:.85rem">Errore durante la generazione. Ollama è attivo?</p>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Rigenera lista';
+  }
+}
+
+// Avvia controllo Ollama al caricamento
+checkOllama();
+</script>
+{% endblock %}

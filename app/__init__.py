@@ -183,12 +183,15 @@ def create_app() -> Flask:
     from .main.routes import main_bp
     from .tasks.routes import tasks_bp
     from .aste.routes import aste_bp
+    from .dispensa import dispensa_bp
+    from .dispensa.models_dispensa import PantryProduct, PantryPurchase, PantryStock, PantryHousehold  # noqa
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp, url_prefix='/admin')
     app.register_blueprint(main_bp)
     app.register_blueprint(tasks_bp, url_prefix='/tasks')
     app.register_blueprint(aste_bp, url_prefix='/aste')
+    app.register_blueprint(dispensa_bp, url_prefix='/dispensa')
 
     # Bootstrap opzionale del DB; in produzione usare Flask-Migrate.
     with app.app_context():

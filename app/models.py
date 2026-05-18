@@ -10,6 +10,7 @@ MODULES = {
     'dashboard_bi':   'Dashboard BI',
     'task_manager':   'Task Manager',
     'gestione_aste':  'Gestione Aste',
+    'dispensa':       'Dispensa',
 }
 
 

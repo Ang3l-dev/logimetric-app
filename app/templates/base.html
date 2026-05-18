@@ -84,6 +84,17 @@
       </a>
       {% endif %}
 
+      {% if current_user.is_authenticated and current_user.can_view('dispensa') %}
+      <a class="nav-item {% if request.endpoint and request.endpoint.startswith('dispensa.') %}active{% endif %}"
+         href="{{ url_for('dispensa.index') }}">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="3" y="4" width="14" height="13" rx="2"/>
+          <path d="M7 4V3M13 4V3M6 10h2M10 10h4M6 13h2M10 13h2"/>
+        </svg>
+        Dispensa
+      </a>
+      {% endif %}
+
       {% if current_user.is_authenticated and current_user.is_admin %}
       <div class="nav-group-label" style="margin-top:16px">Amministrazione</div>
       <a class="nav-item {% if request.endpoint == 'admin.users' %}active{% endif %}"

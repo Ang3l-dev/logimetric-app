@@ -1,0 +1,433 @@
+{% extends 'base.html' %}
+{% block title %}Scansiona Scontrino — LogiMetric{% endblock %}
+
+{% block head %}
+<style>
+.scan-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .scan-layout { grid-template-columns: 1fr; } }
+
+.scan-zone {
+  background: var(--bg-soft); border: 2px dashed var(--line);
+  border-radius: var(--radius); padding: 32px 20px;
+  text-align: center; cursor: pointer; transition: all .2s;
+  min-height: 260px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+}
+.scan-zone:hover, .scan-zone.drag-over {
+  border-color: var(--primary); background: rgba(31,163,255,.05);
+}
+.scan-icon { font-size: 3rem; line-height: 1; }
+.scan-label { font-weight: 600; color: var(--text); }
+.scan-hint  { font-size: .83rem; color: var(--muted); }
+
+.preview-img {
+  width: 100%; border-radius: var(--radius-sm);
+  border: 1px solid var(--line); max-height: 380px;
+  object-fit: contain; background: #000;
+}
+
+.status-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-radius: var(--radius-sm);
+  font-size: .88rem; font-weight: 600; margin-bottom: 16px;
+}
+.status-bar.ok      { background: rgba(61,191,124,.1); border: 1px solid rgba(61,191,124,.25); color: var(--success); }
+.status-bar.warn    { background: rgba(245,166,35,.1); border: 1px solid rgba(245,166,35,.25); color: var(--warning); }
+.status-bar.error   { background: rgba(224,92,92,.1); border: 1px solid rgba(224,92,92,.25); color: var(--danger); }
+.status-bar.loading { background: rgba(31,163,255,.1); border: 1px solid rgba(31,163,255,.25); color: var(--primary); }
+
+.items-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.items-table th { padding: 8px 10px; text-align: left; font-size: .75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--line); }
+.items-table td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.items-table td input, .items-table td select {
+  width: 100%; padding: 5px 8px; border-radius: var(--radius-xs);
+  border: 1px solid var(--line); background: var(--bg-soft);
+  color: var(--text); font-size: .88rem;
+}
+.items-table td input:focus, .items-table td select:focus {
+  border-color: var(--primary); outline: none;
+}
+.del-row-btn {
+  background: none; border: none; color: var(--muted);
+  font-size: 1.1rem; cursor: pointer; padding: 2px 6px;
+  border-radius: var(--radius-xs); transition: all .15s;
+}
+.del-row-btn:hover { color: var(--danger); background: rgba(224,92,92,.1); }
+
+.spinner {
+  width: 20px; height: 20px; border: 2px solid rgba(255,255,255,.15);
+  border-top-color: var(--primary); border-radius: 50%;
+  animation: spin .7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.store-date-row { display: flex; gap: 10px; margin-bottom: 16px; }
+.store-date-row .input { flex: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>📷 Scansiona Scontrino</h1>
+    <p class="page-subtitle">Fotografa lo scontrino e l'IA estrae automaticamente i prodotti</p>
+  </div>
+  <a href="{{ url_for('dispensa.index') }}" class="btn btn-outline">← Dispensa</a>
+</div>
+
+{# Stato Ollama #}
+<div id="ollama-bar" class="status-bar warn">
+  <div class="spinner"></div>
+  Controllo Ollama in corso...
+</div>
+
+{# Modello disponibile #}
+<div id="model-info" style="display:none;margin-bottom:16px;font-size:.83rem;color:var(--muted)">
+  Modello vision: <strong id="model-name" style="color:var(--text)">—</strong>
+</div>
+
+<div class="scan-layout">
+
+  {# ── Colonna sinistra: upload / camera ── #}
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <h3 style="margin:0 0 14px;font-size:1rem;font-weight:700">Carica scontrino</h3>
+
+      <div class="scan-zone" id="drop-zone" onclick="triggerFileInput()" ondragover="onDragOver(event)" ondrop="onDrop(event)">
+        <div class="scan-icon" id="zone-icon">📄</div>
+        <div class="scan-label" id="zone-label">Clicca o trascina qui lo scontrino</div>
+        <div class="scan-hint">JPG, PNG, WEBP — max 10MB</div>
+      </div>
+
+      <input type="file" id="file-input" accept="image/*" capture="environment"
+             style="display:none" onchange="onFileSelected(event)">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+        <button class="btn btn-outline" onclick="triggerFileInput()">🗂 Scegli file</button>
+        <button class="btn btn-outline" onclick="triggerCamera()">📷 Fotocamera</button>
+      </div>
+    </div>
+
+    {# Preview immagine #}
+    <div id="preview-card" class="card" style="display:none">
+      <h3 style="margin:0 0 12px;font-size:1rem;font-weight:700">Anteprima scontrino</h3>
+      <img id="preview-img" class="preview-img" src="" alt="Anteprima">
+      <button class="btn btn-primary btn-full" style="margin-top:14px" id="analyze-btn" onclick="analyzeReceipt()">
+        🔍 Analizza con IA
+      </button>
+    </div>
+  </div>
+
+  {# ── Colonna destra: risultati ── #}
+  <div>
+    <div class="card">
+      <h3 style="margin:0 0 14px;font-size:1rem;font-weight:700">Prodotti estratti</h3>
+
+      {# Negozio + data #}
+      <div class="store-date-row">
+        <input class="input" id="inp-store" placeholder="Negozio (opzionale)">
+        <input class="input" type="date" id="inp-date" value="{{ now }}">
+      </div>
+
+      {# Stato analisi #}
+      <div id="analysis-status" style="color:var(--muted);font-size:.88rem;margin-bottom:12px">
+        Carica uno scontrino e premi "Analizza con IA".
+      </div>
+
+      {# Tabella prodotti estrapolati #}
+      <div id="items-wrap" style="display:none">
+        <div class="table-wrap" style="margin-bottom:14px">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Prodotto</th>
+                <th style="width:70px">Qtà</th>
+                <th style="width:70px">Unità</th>
+                <th style="width:80px">€ Prezzo</th>
+                <th style="width:110px">Categoria</th>
+                <th style="width:36px"></th>
+              </tr>
+            </thead>
+            <tbody id="items-body"></tbody>
+          </table>
+        </div>
+
+        <button class="btn btn-sm btn-outline" onclick="addEmptyRow()" style="margin-bottom:14px">
+          + Aggiungi riga
+        </button>
+
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary" style="flex:1" onclick="confirmPurchase()">
+            ✅ Salva acquisto
+          </button>
+          <button class="btn btn-outline" onclick="clearAll()">🗑 Cancella tutto</button>
+        </div>
+
+        <div id="save-status" style="margin-top:10px"></div>
+      </div>
+
+      {# Fallback manuale #}
+      <div id="manual-fallback" style="display:none; margin-top:14px">
+        <p style="color:var(--muted);font-size:.85rem;margin:0 0 10px">
+          Ollama non è raggiungibile (sei fuori casa?). Usa l'inserimento manuale.
+        </p>
+        <button class="btn btn-outline btn-full" onclick="showManualItems()">✏️ Inserimento manuale</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+const OLLAMA = 'http://localhost:11434';
+const CATS = {{ categories|tojson }};
+const UNITS = {{ units|tojson }};
+
+let currentBase64 = null;
+let ollamaOk = false;
+let visionModel = null;
+
+/* ── Ollama detection ── */
+async function checkOllama() {
+  const bar = document.getElementById('ollama-bar');
+  const fallback = document.getElementById('manual-fallback');
+  try {
+    const r = await fetch(OLLAMA + '/api/tags', { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) throw new Error('not ok');
+    const data = await r.json();
+    // Cerca modello vision (llava, moondream, llama3.2-vision)
+    const models = (data.models || []).map(m => m.name);
+    const visionModels = models.filter(m =>
+      m.includes('llava') || m.includes('moondream') || m.includes('vision') || m.includes('bakllava')
+    );
+    if (visionModels.length > 0) {
+      visionModel = visionModels[0];
+      document.getElementById('model-name').textContent = visionModel;
+      document.getElementById('model-info').style.display = '';
+    } else {
+      // Nessun modello vision, usa mistral per testo
+      visionModel = models.find(m => m.includes('mistral') || m.includes('llama')) || null;
+      if (visionModel) {
+        document.getElementById('model-name').textContent = visionModel + ' (solo testo, meno preciso)';
+        document.getElementById('model-info').style.display = '';
+      }
+    }
+    ollamaOk = true;
+    bar.className = 'status-bar ok';
+    bar.innerHTML = '🟢 Ollama attivo — scan scontrino disponibile';
+  } catch {
+    ollamaOk = false;
+    bar.className = 'status-bar warn';
+    bar.innerHTML = '🟡 Ollama non raggiungibile — sei fuori casa? Usa l\'inserimento manuale.';
+    fallback.style.display = '';
+  }
+}
+
+/* ── File input ── */
+function triggerFileInput() {
+  const fi = document.getElementById('file-input');
+  fi.removeAttribute('capture');
+  fi.click();
+}
+function triggerCamera() {
+  const fi = document.getElementById('file-input');
+  fi.setAttribute('capture', 'environment');
+  fi.click();
+}
+
+function onDragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag-over'); }
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+}
+
+function onFileSelected(e) {
+  const file = e.target.files[0];
+  if (file) loadFile(file);
+}
+
+function loadFile(file) {
+  if (!file.type.startsWith('image/')) { alert('Carica un file immagine.'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    currentBase64 = ev.target.result.split(',')[1];
+    document.getElementById('preview-img').src = ev.target.result;
+    document.getElementById('preview-card').style.display = '';
+    document.getElementById('zone-icon').textContent = '✅';
+    document.getElementById('zone-label').textContent = file.name;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ── Analisi scontrino con Ollama ── */
+async function analyzeReceipt() {
+  if (!currentBase64) { alert('Carica prima uno scontrino.'); return; }
+  if (!ollamaOk) { showManualItems(); return; }
+
+  const btn = document.getElementById('analyze-btn');
+  const status = document.getElementById('analysis-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Analisi in corso...';
+  status.innerHTML = '<span style="color:var(--primary)">L\'IA sta leggendo lo scontrino...</span>';
+
+  const prompt = `Analizza questo scontrino e restituisci SOLO un oggetto JSON valido, senza testo aggiuntivo, senza markdown, senza spiegazioni.
+Formato richiesto:
+{
+  "negozio": "nome del negozio o catena",
+  "data": "YYYY-MM-DD",
+  "prodotti": [
+    {"nome": "nome prodotto", "quantita": 1, "prezzo_totale": 1.99, "categoria": "Categoria"}
+  ],
+  "totale": 15.50
+}
+Categorie possibili: ${CATS.join(', ')}.
+Se non riesci a leggere un campo, usa null. Rispondi SOLO con il JSON.`;
+
+  try {
+    const body = {
+      model: visionModel || 'llava',
+      prompt,
+      stream: false,
+    };
+    // Se modello vision, aggiungi immagine
+    if (visionModel && (visionModel.includes('llava') || visionModel.includes('vision') || visionModel.includes('moondream'))) {
+      body.images = [currentBase64];
+    }
+
+    const r = await fetch(OLLAMA + '/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    const raw = data.response || '';
+
+    let parsed;
+    try {
+      const match = raw.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(match ? match[0] : raw);
+    } catch {
+      status.innerHTML = `<span style="color:var(--warning)">⚠️ L'IA non ha restituito JSON valido. Inserisci i dati manualmente.</span>`;
+      showManualItems();
+      return;
+    }
+
+    // Popola i campi
+    if (parsed.negozio) document.getElementById('inp-store').value = parsed.negozio;
+    if (parsed.data && parsed.data !== 'null') document.getElementById('inp-date').value = parsed.data;
+
+    const prodotti = parsed.prodotti || [];
+    if (prodotti.length === 0) {
+      status.innerHTML = '<span style="color:var(--warning)">⚠️ Nessun prodotto rilevato. Aggiungi manualmente.</span>';
+      showManualItems();
+      return;
+    }
+
+    populateItems(prodotti);
+    status.innerHTML = `<span style="color:var(--success)">✅ ${prodotti.length} prodotti estratti. Verifica e salva.</span>`;
+
+  } catch(e) {
+    status.innerHTML = '<span style="color:var(--danger)">❌ Errore comunicazione con Ollama.</span>';
+    showManualItems();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 Ri-analizza';
+  }
+}
+
+/* ── Tabella items ── */
+function populateItems(prodotti) {
+  const tbody = document.getElementById('items-body');
+  tbody.innerHTML = '';
+  prodotti.forEach(p => addRow(p.nome, p.quantita, 'pz', p.prezzo_totale, p.categoria));
+  document.getElementById('items-wrap').style.display = '';
+}
+
+function showManualItems() {
+  document.getElementById('items-wrap').style.display = '';
+  if (document.getElementById('items-body').children.length === 0) addEmptyRow();
+}
+
+function addEmptyRow() { addRow('', 1, 'pz', 0, 'Altro'); }
+
+let rowId = 0;
+function addRow(name, qty, unit, price, cat) {
+  const id = rowId++;
+  const tbody = document.getElementById('items-body');
+  const tr = document.createElement('tr');
+  tr.id = 'row-' + id;
+  tr.innerHTML = `
+    <td><input type="text" value="${escH(name)}" placeholder="Prodotto"></td>
+    <td><input type="number" min="0" step="0.1" value="${qty || 1}"></td>
+    <td><select>${UNITS.map(u=>`<option ${u===unit?'selected':''}>${u}</option>`).join('')}</select></td>
+    <td><input type="number" min="0" step="0.01" value="${price || 0}"></td>
+    <td><select>${CATS.map(c=>`<option ${c===cat?'selected':''}>${c}</option>`).join('')}</select></td>
+    <td><button class="del-row-btn" onclick="delRow('row-${id}')">🗑</button></td>`;
+  tbody.appendChild(tr);
+  document.getElementById('items-wrap').style.display = '';
+}
+
+function delRow(id) {
+  document.getElementById(id)?.remove();
+}
+
+function escH(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+/* ── Salva acquisto ── */
+async function confirmPurchase() {
+  const tbody = document.getElementById('items-body');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const items = rows.map(tr => {
+    const inputs = tr.querySelectorAll('input');
+    const selects = tr.querySelectorAll('select');
+    return {
+      name:        inputs[0].value.trim(),
+      quantity:    parseFloat(inputs[1].value) || 0,
+      unit:        selects[0].value,
+      price_total: parseFloat(inputs[2].value) || 0,
+      category:    selects[1].value,
+    };
+  }).filter(i => i.name && i.quantity > 0);
+
+  if (!items.length) { alert('Aggiungi almeno un prodotto valido.'); return; }
+
+  const store = document.getElementById('inp-store').value.trim();
+  const d     = document.getElementById('inp-date').value;
+
+  const saveStatus = document.getElementById('save-status');
+  saveStatus.innerHTML = '<span style="color:var(--primary)">⏳ Salvataggio...</span>';
+
+  const r = await fetch('/dispensa/api/save-purchase', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ items, store, date: d }),
+  });
+  const data = await r.json();
+
+  if (data.ok) {
+    saveStatus.innerHTML = `<span style="color:var(--success)">✅ Salvati ${data.count} prodotti!</span>`;
+    setTimeout(() => { window.location.href = '/dispensa/'; }, 1200);
+  } else {
+    saveStatus.innerHTML = `<span style="color:var(--danger)">❌ Errore: ${data.error}</span>`;
+  }
+}
+
+function clearAll() {
+  document.getElementById('items-body').innerHTML = '';
+  document.getElementById('items-wrap').style.display = 'none';
+  currentBase64 = null;
+  document.getElementById('preview-card').style.display = 'none';
+  document.getElementById('zone-icon').textContent = '📄';
+  document.getElementById('zone-label').textContent = 'Clicca o trascina qui lo scontrino';
+  document.getElementById('analysis-status').textContent = 'Carica uno scontrino e premi "Analizza con IA".';
+}
+
+// Imposta data odierna
+document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
+
+checkOllama();
+</script>
+{% endblock %}
