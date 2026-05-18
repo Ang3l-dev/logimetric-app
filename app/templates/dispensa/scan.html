@@ -356,8 +356,14 @@ Rispondi SOLO con il JSON.`;
       options: { num_ctx: 8192 }
     };
     // Aggiungi immagine per modelli vision
+    // Comprimi immagine prima di inviare
+    var imgToSend = currentBase64;
+    try {
+      imgToSend = await compressImage(currentBase64, 1200, 0.75);
+    } catch(ce) { imgToSend = currentBase64; }
+
     if (visionModel && isVisionModel(visionModel)) {
-      body.images = [compressedBase64];
+      body.images = [imgToSend];
     }
 
     const r = await fetch(OLLAMA + '/api/generate', {
