@@ -189,40 +189,67 @@ let ollamaOk = false;
 let visionModel = null;
 
 /* ── Ollama detection ── */
-async function checkOllama() {
+function isVisionModel(name) {
+  return name.includes('llava') || name.includes('moondream') ||
+         name.includes('vision') || name.includes('bakllava') ||
+         name.includes('-vl') || name.includes(':vl') || name.includes('qwen3-vl');
+}
+
+async function checkOllama(retries = 3) {
   const bar = document.getElementById('ollama-bar');
   const fallback = document.getElementById('manual-fallback');
-  try {
-    const r = await fetch(OLLAMA + '/api/tags', { signal: AbortSignal.timeout(3000) });
-    if (!r.ok) throw new Error('not ok');
-    const data = await r.json();
-    // Cerca modello vision (llava, moondream, llama3.2-vision)
-    const models = (data.models || []).map(m => m.name);
-    const visionModels = models.filter(m =>
-      m.includes('llava') || m.includes('moondream') || m.includes('vision') || m.includes('bakllava')
-    );
-    if (visionModels.length > 0) {
-      visionModel = visionModels[0];
-      document.getElementById('model-name').textContent = visionModel;
-      document.getElementById('model-info').style.display = '';
-    } else {
-      // Nessun modello vision, usa mistral per testo
-      visionModel = models.find(m => m.includes('mistral') || m.includes('llama')) || null;
-      if (visionModel) {
-        document.getElementById('model-name').textContent = visionModel + ' (solo testo, meno preciso)';
+  const btn = document.getElementById('analyze-btn');
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      bar.className = 'status-bar loading';
+      bar.innerHTML = attempt > 1
+        ? `<div class="spinner"></div> Connessione a Ollama (tentativo ${attempt}/${retries})...`
+        : '<div class="spinner"></div> Connessione a Ollama...';
+
+      const r = await fetch(OLLAMA + '/api/tags', { signal: AbortSignal.timeout(6000) });
+      if (!r.ok) throw new Error('not ok');
+      const data = await r.json();
+      const models = (data.models || []).map(m => m.name);
+
+      // Priorità modelli vision locali (esclude cloud)
+      const visionModels = models.filter(m => isVisionModel(m) && !m.includes('cloud'));
+      if (visionModels.length > 0) {
+        visionModel = visionModels[0];
+        document.getElementById('model-name').textContent = visionModel;
         document.getElementById('model-info').style.display = '';
+      } else {
+        // Fallback testo
+        visionModel = models.find(m =>
+          !m.includes('cloud') && !m.includes('embedding') &&
+          (m.includes('mistral') || m.includes('llama') || m.includes('qwen') || m.includes('gemma'))
+        ) || null;
+        if (visionModel) {
+          document.getElementById('model-name').textContent = visionModel + ' (testo — qualità scan ridotta)';
+          document.getElementById('model-info').style.display = '';
+        }
       }
+
+      ollamaOk = true;
+      bar.className = 'status-bar ok';
+      bar.innerHTML = '🟢 Ollama attivo — scan scontrino disponibile';
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 Analizza con IA'; }
+      return true;
+
+    } catch {
+      if (attempt < retries) await new Promise(res => setTimeout(res, 1500));
     }
-    ollamaOk = true;
-    bar.className = 'status-bar ok';
-    bar.innerHTML = '🟢 Ollama attivo — scan scontrino disponibile';
-  } catch {
-    ollamaOk = false;
-    bar.className = 'status-bar warn';
-    bar.innerHTML = '🟡 Ollama non raggiungibile — sei fuori casa? Usa l\'inserimento manuale.';
-    fallback.style.display = '';
   }
+
+  // Tutti i tentativi falliti
+  ollamaOk = false;
+  bar.className = 'status-bar warn';
+  bar.innerHTML = '🟡 Ollama non risponde. <a href="#" onclick="retryOllama();return false;" style="color:inherit;font-weight:700;text-decoration:underline">🔄 Riprova</a> &nbsp;|&nbsp; sei fuori casa? usa l'inserimento manuale.';
+  if (fallback) fallback.style.display = '';
+  return false;
 }
+
+async function retryOllama() { ollamaOk = false; await checkOllama(2); }
 
 /* ── File input ── */
 function triggerFileInput() {
@@ -265,35 +292,43 @@ function loadFile(file) {
 /* ── Analisi scontrino con Ollama ── */
 async function analyzeReceipt() {
   if (!currentBase64) { alert('Carica prima uno scontrino.'); return; }
-  if (!ollamaOk) { showManualItems(); return; }
+
+  // Se Ollama non era ok, riprova prima di arrendersi
+  if (!ollamaOk) {
+    const ok = await checkOllama(2);
+    if (!ok) { showManualItems(); return; }
+  }
 
   const btn = document.getElementById('analyze-btn');
   const status = document.getElementById('analysis-status');
   btn.disabled = true;
   btn.textContent = '⏳ Analisi in corso...';
-  status.innerHTML = '<span style="color:var(--primary)">L\'IA sta leggendo lo scontrino...</span>';
+  status.innerHTML = '<span style="color:var(--primary)">🔍 L'IA sta leggendo lo scontrino...</span>';
 
-  const prompt = `Analizza questo scontrino e restituisci SOLO un oggetto JSON valido, senza testo aggiuntivo, senza markdown, senza spiegazioni.
-Formato richiesto:
+  const prompt = `Sei un assistente che analizza scontrini italiani.
+Restituisci SOLO un oggetto JSON valido, senza testo, senza markdown, senza spiegazioni.
+Formato:
 {
-  "negozio": "nome del negozio o catena",
-  "data": "YYYY-MM-DD",
+  "negozio": "nome supermercato/negozio oppure null",
+  "data": "YYYY-MM-DD oppure null",
   "prodotti": [
     {"nome": "nome prodotto", "quantita": 1, "prezzo_totale": 1.99, "categoria": "Categoria"}
   ],
   "totale": 15.50
 }
 Categorie possibili: ${CATS.join(', ')}.
-Se non riesci a leggere un campo, usa null. Rispondi SOLO con il JSON.`;
+Regole: se un campo non è leggibile usa null. Ogni prodotto DEVE avere nome, quantita e prezzo_totale.
+Rispondi SOLO con il JSON.`;
 
   try {
     const body = {
       model: visionModel || 'llava',
       prompt,
       stream: false,
+      options: { num_ctx: 8192 }
     };
-    // Se modello vision, aggiungi immagine
-    if (visionModel && (visionModel.includes('llava') || visionModel.includes('vision') || visionModel.includes('moondream'))) {
+    // Aggiungi immagine per modelli vision
+    if (visionModel && isVisionModel(visionModel)) {
       body.images = [currentBase64];
     }
 
@@ -302,6 +337,15 @@ Se non riesci a leggere un campo, usa null. Rispondi SOLO con il JSON.`;
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+
+    if (!r.ok) throw new Error('Ollama HTTP ' + r.status);
+
+    // Aggiorna il banner se Ollama ha risposto
+    const bar = document.getElementById('ollama-bar');
+    bar.className = 'status-bar ok';
+    bar.innerHTML = '🟢 Ollama attivo — scan scontrino disponibile';
+    ollamaOk = true;
+
     const data = await r.json();
     const raw = data.response || '';
 
@@ -310,14 +354,18 @@ Se non riesci a leggere un campo, usa null. Rispondi SOLO con il JSON.`;
       const match = raw.match(/\{[\s\S]*\}/);
       parsed = JSON.parse(match ? match[0] : raw);
     } catch {
-      status.innerHTML = `<span style="color:var(--warning)">⚠️ L'IA non ha restituito JSON valido. Inserisci i dati manualmente.</span>`;
+      status.innerHTML = '<span style="color:var(--warning)">⚠️ L'IA non ha restituito JSON valido. Inserisci i dati manualmente.</span>';
       showManualItems();
       return;
     }
 
-    // Popola i campi
-    if (parsed.negozio) document.getElementById('inp-store').value = parsed.negozio;
-    if (parsed.data && parsed.data !== 'null') document.getElementById('inp-date').value = parsed.data;
+    // ── Popola negozio e data ──
+    if (parsed.negozio && parsed.negozio !== 'null') {
+      document.getElementById('inp-store').value = parsed.negozio;
+    }
+    if (parsed.data && parsed.data !== 'null') {
+      document.getElementById('inp-date').value = parsed.data;
+    }
 
     const prodotti = parsed.prodotti || [];
     if (prodotti.length === 0) {
@@ -326,11 +374,30 @@ Se non riesci a leggere un campo, usa null. Rispondi SOLO con il JSON.`;
       return;
     }
 
+    // ── Valida campi mancanti ──
+    const warnings = [];
+    if (!parsed.negozio || parsed.negozio === 'null') warnings.push('negozio');
+    if (!parsed.data    || parsed.data    === 'null') warnings.push('data');
+
+    const prodottiIncompleti = prodotti.filter(p =>
+      !p.nome || p.quantita === null || p.prezzo_totale === null
+    );
+
     populateItems(prodotti);
-    status.innerHTML = `<span style="color:var(--success)">✅ ${prodotti.length} prodotti estratti. Verifica e salva.</span>`;
+
+    if (warnings.length > 0 || prodottiIncompleti.length > 0) {
+      showMissingFieldsWarning(warnings, prodottiIncompleti.length, prodotti.length);
+    } else {
+      status.innerHTML = `<span style="color:var(--success)">✅ ${prodotti.length} prodotti estratti. Verifica e salva.</span>`;
+    }
 
   } catch(e) {
-    status.innerHTML = '<span style="color:var(--danger)">❌ Errore comunicazione con Ollama.</span>';
+    // Se la chiamata fallisce, aggiorna il banner
+    const bar = document.getElementById('ollama-bar');
+    bar.className = 'status-bar warn';
+    bar.innerHTML = '🟡 Ollama non risponde. <a href="#" onclick="retryOllama();return false;" style="color:inherit;font-weight:700;text-decoration:underline">🔄 Riprova</a>';
+    ollamaOk = false;
+    status.innerHTML = '<span style="color:var(--danger)">❌ Errore comunicazione con Ollama. Riprova o inserisci manualmente.</span>';
     showManualItems();
   } finally {
     btn.disabled = false;
@@ -338,91 +405,35 @@ Se non riesci a leggere un campo, usa null. Rispondi SOLO con il JSON.`;
   }
 }
 
-/* ── Tabella items ── */
-function populateItems(prodotti) {
-  const tbody = document.getElementById('items-body');
-  tbody.innerHTML = '';
-  prodotti.forEach(p => addRow(p.nome, p.quantita, 'pz', p.prezzo_totale, p.categoria));
-  document.getElementById('items-wrap').style.display = '';
+/* ── Warning campi mancanti ── */
+function showMissingFieldsWarning(missingFields, nIncompleti, nTotali) {
+  const status = document.getElementById('analysis-status');
+  let html = `<div style="background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.3);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:12px">`;
+  html += `<div style="font-weight:700;color:var(--warning);margin-bottom:8px">⚠️ L'IA non ha estratto tutti i dati</div>`;
+
+  if (missingFields.includes('negozio')) html += `<div style="font-size:.85rem;margin-bottom:4px">• <strong>Negozio</strong> non rilevato — inseriscilo manualmente nel campo in alto</div>`;
+  if (missingFields.includes('data'))    html += `<div style="font-size:.85rem;margin-bottom:4px">• <strong>Data</strong> non rilevata — verifica il campo data</div>`;
+  if (nIncompleti > 0) html += `<div style="font-size:.85rem;margin-bottom:4px">• <strong>${nIncompleti} prodotti</strong> con dati incompleti — controlla la tabella</div>`;
+
+  html += `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">`;
+  html += `<button class="btn btn-sm btn-outline" onclick="retakePhoto()" style="border-color:var(--warning);color:var(--warning)">📷 Rifai la foto</button>`;
+  html += `<button class="btn btn-sm btn-outline" onclick="dismissWarning(this)" style="opacity:.7">✏️ Completo io manualmente</button>`;
+  html += `</div></div>`;
+  html += `<span style="color:var(--success);font-size:.85rem">✅ ${nTotali - nIncompleti} prodotti estratti correttamente.</span>`;
+  status.innerHTML = html;
 }
 
-function showManualItems() {
-  document.getElementById('items-wrap').style.display = '';
-  if (document.getElementById('items-body').children.length === 0) addEmptyRow();
-}
-
-function addEmptyRow() { addRow('', 1, 'pz', 0, 'Altro'); }
-
-let rowId = 0;
-function addRow(name, qty, unit, price, cat) {
-  const id = rowId++;
-  const tbody = document.getElementById('items-body');
-  const tr = document.createElement('tr');
-  tr.id = 'row-' + id;
-  tr.innerHTML = `
-    <td><input type="text" value="${escH(name)}" placeholder="Prodotto"></td>
-    <td><input type="number" min="0" step="0.1" value="${qty || 1}"></td>
-    <td><select>${UNITS.map(u=>`<option ${u===unit?'selected':''}>${u}</option>`).join('')}</select></td>
-    <td><input type="number" min="0" step="0.01" value="${price || 0}"></td>
-    <td><select>${CATS.map(c=>`<option ${c===cat?'selected':''}>${c}</option>`).join('')}</select></td>
-    <td><button class="del-row-btn" onclick="delRow('row-${id}')">🗑</button></td>`;
-  tbody.appendChild(tr);
-  document.getElementById('items-wrap').style.display = '';
-}
-
-function delRow(id) {
-  document.getElementById(id)?.remove();
-}
-
-function escH(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-
-/* ── Salva acquisto ── */
-async function confirmPurchase() {
-  const tbody = document.getElementById('items-body');
-  const rows = Array.from(tbody.querySelectorAll('tr'));
-  const items = rows.map(tr => {
-    const inputs = tr.querySelectorAll('input');
-    const selects = tr.querySelectorAll('select');
-    return {
-      name:        inputs[0].value.trim(),
-      quantity:    parseFloat(inputs[1].value) || 0,
-      unit:        selects[0].value,
-      price_total: parseFloat(inputs[2].value) || 0,
-      category:    selects[1].value,
-    };
-  }).filter(i => i.name && i.quantity > 0);
-
-  if (!items.length) { alert('Aggiungi almeno un prodotto valido.'); return; }
-
-  const store = document.getElementById('inp-store').value.trim();
-  const d     = document.getElementById('inp-date').value;
-
-  const saveStatus = document.getElementById('save-status');
-  saveStatus.innerHTML = '<span style="color:var(--primary)">⏳ Salvataggio...</span>';
-
-  const r = await fetch('/dispensa/api/save-purchase', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-    body: JSON.stringify({ items, store, date: d }),
-  });
-  const data = await r.json();
-
-  if (data.ok) {
-    saveStatus.innerHTML = `<span style="color:var(--success)">✅ Salvati ${data.count} prodotti!</span>`;
-    setTimeout(() => { window.location.href = '/dispensa/'; }, 1200);
-  } else {
-    saveStatus.innerHTML = `<span style="color:var(--danger)">❌ Errore: ${data.error}</span>`;
-  }
-}
-
-function clearAll() {
-  document.getElementById('items-body').innerHTML = '';
-  document.getElementById('items-wrap').style.display = 'none';
-  currentBase64 = null;
-  document.getElementById('preview-card').style.display = 'none';
-  document.getElementById('zone-icon').textContent = '📄';
-  document.getElementById('zone-label').textContent = 'Clicca o trascina qui lo scontrino';
+function retakePhoto() {
+  // Reset dell'immagine e della tabella per ricominciare
+  clearAll();
   document.getElementById('analysis-status').textContent = 'Carica uno scontrino e premi "Analizza con IA".';
+  // Apri subito la fotocamera
+  triggerCamera();
+}
+
+function dismissWarning(btn) {
+  const box = btn.closest('div[style*="rgba(245"]');
+  if (box) box.remove();
 }
 
 // Imposta data odierna
