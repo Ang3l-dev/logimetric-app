@@ -438,6 +438,104 @@ function dismissWarning(btn) {
 }
 
 // Imposta data odierna
+
+/* ── Tabella items ── */
+function populateItems(prodotti) {
+  const tbody = document.getElementById('items-body');
+  tbody.innerHTML = '';
+  prodotti.forEach(function(p) {
+    addRow(p.nome || '', p.quantita || 1, 'pz', p.prezzo_totale || 0, p.categoria || 'Altro');
+  });
+  document.getElementById('items-wrap').style.display = '';
+}
+
+function showManualItems() {
+  document.getElementById('items-wrap').style.display = '';
+  if (document.getElementById('items-body').children.length === 0) addEmptyRow();
+}
+
+function addEmptyRow() { addRow('', 1, 'pz', 0, 'Altro'); }
+
+var rowId = 0;
+function addRow(name, qty, unit, price, cat) {
+  var id = rowId++;
+  var tbody = document.getElementById('items-body');
+  var tr = document.createElement('tr');
+  tr.id = 'row-' + id;
+  var unitOpts = UNITS.map(function(u) { return '<option' + (u === unit ? ' selected' : '') + '>' + u + '</option>'; }).join('');
+  var catOpts = CATS.map(function(c) { return '<option' + (c === cat ? ' selected' : '') + '>' + c + '</option>'; }).join('');
+  tr.innerHTML = [
+    '<td><input type="text" value="' + escH(name) + '" placeholder="Prodotto"></td>',
+    '<td><input type="number" min="0" step="0.1" value="' + (qty || 1) + '"></td>',
+    '<td><select>' + unitOpts + '</select></td>',
+    '<td><input type="number" min="0" step="0.01" value="' + (price || 0) + '"></td>',
+    '<td><select>' + catOpts + '</select></td>',
+    '<td><button class="del-row-btn" onclick="this.closest(\'tr\').remove()">🗑</button></td>'
+  ].join('');
+  tbody.appendChild(tr);
+  document.getElementById('items-wrap').style.display = '';
+}
+
+function delRow(id) {
+  var el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function escH(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/* ── Salva acquisto ── */
+async function confirmPurchase() {
+  var tbody = document.getElementById('items-body');
+  var rows = Array.from(tbody.querySelectorAll('tr'));
+  var items = rows.map(function(tr) {
+    var inputs = tr.querySelectorAll('input');
+    var selects = tr.querySelectorAll('select');
+    return {
+      name:        inputs[0].value.trim(),
+      quantity:    parseFloat(inputs[1].value) || 0,
+      unit:        selects[0].value,
+      price_total: parseFloat(inputs[2].value) || 0,
+      category:    selects[1].value,
+    };
+  }).filter(function(i) { return i.name && i.quantity > 0; });
+
+  if (!items.length) { alert('Aggiungi almeno un prodotto valido.'); return; }
+
+  var store = document.getElementById('inp-store').value.trim();
+  var d     = document.getElementById('inp-date').value;
+  var saveStatus = document.getElementById('save-status');
+  saveStatus.innerHTML = '<span style="color:var(--primary)">⏳ Salvataggio...</span>';
+
+  try {
+    var r = await fetch('/dispensa/api/save-purchase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ items: items, store: store, date: d }),
+    });
+    var data = await r.json();
+    if (data.ok) {
+      saveStatus.innerHTML = '<span style="color:var(--success)">✅ Salvati ' + data.count + ' prodotti!</span>';
+      setTimeout(function() { window.location.href = '/dispensa/'; }, 1200);
+    } else {
+      saveStatus.innerHTML = '<span style="color:var(--danger)">❌ Errore: ' + data.error + '</span>';
+    }
+  } catch(e) {
+    saveStatus.innerHTML = '<span style="color:var(--danger)">❌ Errore di rete.</span>';
+  }
+}
+
+function clearAll() {
+  document.getElementById('items-body').innerHTML = '';
+  document.getElementById('items-wrap').style.display = 'none';
+  currentBase64 = null;
+  document.getElementById('preview-card').style.display = 'none';
+  document.getElementById('zone-icon').textContent = '📄';
+  document.getElementById('zone-label').textContent = 'Clicca o trascina qui lo scontrino';
+  document.getElementById('analysis-status').textContent = 'Carica uno scontrino e premi "Analizza con IA".';
+}
+
 document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
 
 checkOllama();
