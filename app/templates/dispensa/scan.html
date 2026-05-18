@@ -305,7 +305,7 @@ async function analyzeReceipt() {
   const status = document.getElementById('analysis-status');
   btn.disabled = true;
   btn.textContent = '⏳ Analisi in corso...';
-  status.innerHTML = '<span style="color:var(--primary)">🔍 L'IA sta leggendo lo scontrino...</span>';
+  status.innerHTML = "<span style='color:var(--primary)'>🔍 L'IA sta leggendo lo scontrino...</span>";
 
   const prompt = `Sei un assistente che analizza scontrini italiani.
 Restituisci SOLO un oggetto JSON valido, senza testo, senza markdown, senza spiegazioni.
@@ -356,7 +356,7 @@ Rispondi SOLO con il JSON.`;
       const match = raw.match(/\{[\s\S]*\}/);
       parsed = JSON.parse(match ? match[0] : raw);
     } catch {
-      status.innerHTML = '<span style="color:var(--warning)">⚠️ L'IA non ha restituito JSON valido. Inserisci i dati manualmente.</span>';
+      status.innerHTML = `<span style="color:var(--warning)">⚠️ L'IA non ha restituito JSON valido. Inserisci i dati manualmente.</span>`;
       showManualItems();
       return;
     }
