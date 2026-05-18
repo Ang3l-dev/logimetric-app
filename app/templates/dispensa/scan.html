@@ -210,7 +210,7 @@ function compressImage(base64, maxPx, quality) {
       canvas.width = w; canvas.height = h;
       var ctx = canvas.getContext('2d');
       // Aumenta contrasto per testo su carta termica
-      ctx.filter = 'contrast(1.3) brightness(1.1)';
+      ctx.filter = 'grayscale(1) contrast(1.6) brightness(1.15)';
       ctx.drawImage(img, 0, 0, w, h);
       var dataUrl = canvas.toDataURL('image/jpeg', quality);
       resolve(dataUrl.split(',')[1]);
@@ -344,20 +344,10 @@ async function analyzeReceipt() {
   btn.textContent = '⏳ Analisi in corso...';
   status.innerHTML = "<span style='color:var(--primary)'>🔍 L'IA sta leggendo lo scontrino...</span>";
 
-  const prompt = `Sei un assistente che analizza scontrini italiani.
-Restituisci SOLO un oggetto JSON valido, senza testo, senza markdown, senza spiegazioni.
-Formato:
-{
-  "negozio": "nome supermercato/negozio oppure null",
-  "data": "YYYY-MM-DD oppure null",
-  "prodotti": [
-    {"nome": "nome prodotto", "quantita": 1, "prezzo_totale": 1.99, "categoria": "Categoria"}
-  ],
-  "totale": 15.50
-}
-Categorie possibili: ${CATS.join(', ')}.
-Regole: se un campo non è leggibile usa null. Ogni prodotto DEVE avere nome, quantita e prezzo_totale.
-Rispondi SOLO con il JSON.`;
+  const prompt = `Look at this Italian supermarket receipt image carefully.
+Return ONLY a JSON object, no other text, no markdown, no explanation.
+JSON format: {"negozio":"store chain name found at top (e.g. Lidl, Esselunga, Conad)","data":"YYYY-MM-DD","prodotti":[{"nome":"readable Italian product name","quantita":1,"prezzo_totale":1.99,"categoria":"Bevande"}],"totale":77.70}
+Read EVERY product line between the header and SUBTOTALE. Include ALL items. The price is the number on the RIGHT of each product line. Skip lines: SUBTOTALE, TOTALE, IVA, pagamento, importo, documento. Use null for unreadable fields. Return ONLY the JSON.`;
 
   try {
     const body = {
@@ -393,6 +383,7 @@ Rispondi SOLO con il JSON.`;
 
     const data = await r.json();
     const raw = data.response || '';
+    console.log('[Dispensa] Ollama response:', raw.substring(0, 800));
 
     let parsed;
     try {
