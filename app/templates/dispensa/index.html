@@ -86,20 +86,35 @@
 
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .section-title  { font-size: 1rem; font-weight: 700; margin: 0; }
+
+@media (max-width: 700px) {
+  .two-col { grid-template-columns: 1fr !important; }
+  .kpi-strip { grid-template-columns: 1fr 1fr !important; }
+  .stock-grid { grid-template-columns: 1fr 1fr !important; }
+  .cat-pill { font-size: .72rem; padding: 4px 8px; }
+  .section-header { flex-wrap: wrap; gap: 8px; }
+  .quick-add-row { flex-direction: column; }
+  .quick-add-row .input { min-width: unset; width: 100%; }
+}
+@media (max-width: 480px) {
+  .stock-grid { grid-template-columns: 1fr !important; }
+  .kpi-strip { grid-template-columns: 1fr 1fr !important; }
+  .kpi-box .val { font-size: 1.4rem; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header" style="flex-wrap:wrap;gap:12px">
   <div>
     <h1>🛒 Dispensa</h1>
     <p class="page-subtitle">Gestione scorte, acquisti e previsioni con IA locale</p>
   </div>
-  <div style="display:flex;gap:10px;align-items:center">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     {% if current_user.can_write('dispensa') %}
-    <a href="{{ url_for('dispensa.scan') }}" class="btn btn-primary">📷 Scansiona scontrino</a>
+    <a href="{{ url_for('dispensa.scan') }}" class="btn btn-primary" style="white-space:nowrap">📷 Scansiona scontrino</a>
     {% endif %}
-    <a href="{{ url_for('dispensa.reports') }}" class="btn btn-outline">📊 Report</a>
+    <a href="{{ url_for('dispensa.reports') }}" class="btn btn-outline" style="white-space:nowrap">📊 Report</a>
   </div>
 </div>
 

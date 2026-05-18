@@ -5,6 +5,17 @@
 <style>
 .scan-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 900px) { .scan-layout { grid-template-columns: 1fr; } }
+.hide-mobile { display: table-cell; }
+@media (max-width: 600px) {
+  .hide-mobile { display: none !important; }
+  .items-table { font-size: .78rem; }
+  .items-table th:nth-child(3), .items-table td:nth-child(3) { display: none; } /* nascondi unità */
+  .items-table th:nth-child(5), .items-table td:nth-child(5) { max-width: 80px; }
+  .items-table td select { font-size: .75rem; }
+  .store-date-row { flex-direction: column; }
+  .scan-zone { min-height: 160px; padding: 20px; }
+  .scan-icon { font-size: 2rem; }
+}
 
 .scan-zone {
   background: var(--bg-soft); border: 2px dashed var(--line);
@@ -139,11 +150,11 @@
             <thead>
               <tr>
                 <th>Prodotto</th>
-                <th style="width:70px">Qtà</th>
-                <th style="width:70px">Unità</th>
-                <th style="width:80px">€ Prezzo</th>
-                <th style="width:110px">Categoria</th>
-                <th style="width:36px"></th>
+                <th style="width:55px">Qtà</th>
+                <th style="width:55px" class="hide-mobile">Unità</th>
+                <th style="width:70px">€</th>
+                <th>Categoria</th>
+                <th style="width:30px"></th>
               </tr>
             </thead>
             <tbody id="items-body"></tbody>
