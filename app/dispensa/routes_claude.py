@@ -241,20 +241,72 @@ def api_claude_shopping_list():
         'stock': stock_map,
     }
 
-    prompt = f"""Sei un assistente per la spesa domestica italiana. Il nucleo familiare è composto da {family_profile["adulti"]} adulto/i e {len(family_profile["bambini"])} bambino/i ({", ".join([c["nome"]+" "+str(c["eta"])+" anni" for c in family_profile["bambini"]]) if family_profile["bambini"] else "nessuno"}).
-Analizza questi dati e genera la lista della spesa per la prossima settimana.
+    # Compatta il contesto: solo i prodotti più rilevanti (top 30 per frequenza)
+    prodotti_compatti = sorted(
+        context['prodotti'],
+        key=lambda p: len(p['acquisti']),
+        reverse=True
+    )[:30]
+    
+    # Semplifica gli acquisti: solo data e prezzo
+    for p in prodotti_compatti:
+        p['acquisti'] = [{'data': a['data'], 'euro': a['euro']} for a in p['acquisti'][-5:]]
 
-DATI: {json.dumps(context, ensure_ascii=False)}
+    stock_esaurimento = {k: v for k, v in context['stock'].items() if v.get('esaurimento')}
 
-Rispondi SOLO con JSON:
-{{"lista":[{{"prodotto":"nome","quantita":1,"unita":"kg","priorita":"alta|media|bassa","motivo":"max 15 parole"}}],"note":"consiglio opzionale"}}
+    famiglia_str = f"{family_profile['adulti']} adult{'i' if family_profile['adulti']!=1 else 'o'}"
+    if family_profile['bambini']:
+        nomi = ', '.join([f"{c['nome']} {c['eta']} anni" for c in family_profile['bambini']])
+        famiglia_str += f", {len(family_profile['bambini'])} bambin{'i' if len(family_profile['bambini'])!=1 else 'o'} ({nomi})"
 
-Ordina per priorità. Solo JSON."""
+    prompt = (
+        f"Famiglia: {famiglia_str}. Data: {context['data_oggi']}. "
+        f"Prodotti in esaurimento: {list(stock_esaurimento.keys())}. "
+        f"Storico acquisti (ultimi 90gg): {json.dumps(prodotti_compatti, ensure_ascii=False)}. "
+        "Genera lista spesa settimanale. "
+        'Rispondi SOLO con JSON valido: {"lista":[{"prodotto":"nome","quantita":1,"unita":"pz","priorita":"alta","motivo":"breve"}],"note":""}. '
+        "Max 20 prodotti. Ordina per priorita alta/media/bassa. SOLO JSON."
+    )
 
     try:
-        raw = _claude(messages=[{'role': 'user', 'content': prompt}], max_tokens=1500)
-        match = re.search(r'\{[\s\S]*\}', raw)
-        result = json.loads(match.group(0)) if match else {'lista': [], 'note': ''}
+        raw = _claude(messages=[{'role': 'user', 'content': prompt}], max_tokens=2000)
+        
+        # Parser robusto: prova diverse strategie
+        result = None
+        
+        # Strategia 1: trova il JSON completo
+        m = re.search(r'\{[\s\S]*\}', raw)
+        if m:
+            try:
+                result = json.loads(m.group(0))
+            except json.JSONDecodeError:
+                pass
+        
+        # Strategia 2: estrai solo la lista se il JSON è troncato
+        if not result:
+            m_lista = re.search(r'"lista"\s*:\s*(\[[\s\S]*?\])', raw)
+            if m_lista:
+                try:
+                    lista = json.loads(m_lista.group(1))
+                    result = {'lista': lista, 'note': ''}
+                except json.JSONDecodeError:
+                    # Prova a riparare il JSON troncato
+                    raw_lista = m_lista.group(1)
+                    # Chiudi l'array e l'oggetto se troncati
+                    if not raw_lista.rstrip().endswith(']'):
+                        # Trova l'ultimo oggetto completo
+                        last_complete = raw_lista.rfind('},')
+                        if last_complete > 0:
+                            raw_lista = raw_lista[:last_complete+1] + ']'
+                    try:
+                        lista = json.loads(raw_lista)
+                        result = {'lista': lista, 'note': ''}
+                    except:
+                        pass
+        
+        if not result:
+            return jsonify({'ok': False, 'error': 'Risposta AI non valida, riprova'}), 500
+            
         return jsonify({'ok': True, 'data': result})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
