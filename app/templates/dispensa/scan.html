@@ -101,12 +101,10 @@
 </div>
 
 {# Stato Ollama #}
-<div id="ollama-bar" class="status-bar warn">⏳ Verifica Ollama...</div>
+<div id="ollama-bar" class="status-bar ok">🟢 Claude AI — scan scontrino disponibile</div>
 
 {# Modello disponibile #}
-<div id="model-info" style="display:none;margin-bottom:16px;font-size:.83rem;color:var(--muted)">
-  Modello vision: <strong id="model-name" style="color:var(--text)">—</strong>
-</div>
+<div style="margin-bottom:12px;font-size:.83rem;color:var(--muted)">Modello: <strong style="color:var(--text)">claude-sonnet-4</strong></div>
 
 <div class="scan-layout">
 
@@ -188,13 +186,7 @@
         <div id="save-status" style="margin-top:10px"></div>
       </div>
 
-      {# Fallback manuale #}
-      <div id="manual-fallback" style="display:none; margin-top:14px">
-        <p style="color:var(--muted);font-size:.85rem;margin:0 0 10px">
-          Ollama non è raggiungibile (sei fuori casa?). Usa l'inserimento manuale.
-        </p>
-        <button class="btn btn-outline btn-full" onclick="showManualItems()">✏️ Inserimento manuale</button>
-      </div>
+
     </div>
   </div>
 </div>
@@ -206,8 +198,6 @@ const CATS = {{ categories|tojson }};
 const UNITS = {{ units|tojson }};
 
 let currentBase64 = null;
-let ollamaOk = false;
-let visionModel = null;
 
 /* ── Compressione immagine ── */
 function compressImage(base64, maxPx, quality) {
@@ -231,77 +221,6 @@ function compressImage(base64, maxPx, quality) {
     img.src = 'data:image/jpeg;base64,' + base64;
   });
 }
-
-/* ── Ollama detection ── */
-function isVisionModel(name) {
-  return name.includes('llava') || name.includes('moondream') ||
-         name.includes('vision') || name.includes('bakllava') ||
-         name.includes('-vl') || name.includes('vl:') || name.includes('qwen3-vl');
-}
-
-function setOllamaOk(models) {
-  const bar = document.getElementById('ollama-bar');
-  var allVision = models.filter(function(m) {
-    return isVisionModel(m) && !m.includes('cloud');
-  });
-  var preferred = allVision.find(function(m) { return m.includes('qwen3-vl'); }) ||
-                  allVision.find(function(m) { return m.includes('llava'); }) ||
-                  allVision[0] || null;
-  if (preferred) {
-    visionModel = preferred;
-  } else {
-    visionModel = null;
-    for (var i = 0; i < models.length; i++) {
-      var m = models[i];
-      if (!m.includes('cloud') && !m.includes('embedding') &&
-          (m.includes('mistral') || m.includes('llama') || m.includes('qwen') || m.includes('gemma'))) {
-        visionModel = m;
-        break;
-      }
-    }
-  }
-  if (visionModel) {
-    var label = isVisionModel(visionModel) ? visionModel : visionModel + ' (testo)';
-    document.getElementById('model-name').textContent = label;
-    document.getElementById('model-info').style.display = '';
-  }
-  ollamaOk = true;
-  bar.className = 'status-bar ok';
-  bar.innerHTML = '🟢 Ollama attivo';
-}
-
-function setOllamaKo() {
-  var bar = document.getElementById('ollama-bar');
-  ollamaOk = false;
-  bar.className = 'status-bar warn';
-  bar.innerHTML = '🟡 Ollama non raggiungibile (sei fuori casa?) — puoi comunque inserire manualmente';
-  var f = document.getElementById('manual-fallback');
-  if (f) f.style.display = '';
-}
-
-async function checkOllama() {
-  var bar = document.getElementById('ollama-bar');
-  bar.className = 'status-bar warn';
-  bar.innerHTML = '⏳ [1] Avvio check Ollama...';
-  try {
-    var ctrl = new AbortController();
-    var timer = setTimeout(function() { ctrl.abort(); }, 8000);
-    bar.innerHTML = '⏳ [2] Fetch in corso verso ' + OLLAMA + '...';
-    var r = await fetch(OLLAMA + '/api/tags', { signal: ctrl.signal });
-    bar.innerHTML = '⏳ [3] Risposta ricevuta: HTTP ' + r.status;
-    clearTimeout(timer);
-    var data = await r.json();
-    bar.innerHTML = '⏳ [4] JSON OK: ' + (data.models || []).length + ' modelli trovati';
-    var models = (data.models || []).map(function(m) { return m.name; });
-    setOllamaOk(models);
-  } catch(e) {
-    bar.className = 'status-bar error';
-    bar.innerHTML = '❌ Errore al check: ' + e.name + ' — ' + e.message;
-    setOllamaKo();
-  }
-}
-
-function retryOllama() { ollamaOk = false; checkOllama(); }
 
 /* ── File input ── */
 function triggerFileInput() {
@@ -552,6 +471,5 @@ function clearAll() {
 
 document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
 
-checkOllama();
 </script>
 {% endblock %}
