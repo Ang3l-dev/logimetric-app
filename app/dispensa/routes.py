@@ -160,6 +160,25 @@ def api_save_purchase():
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
+
+@dispensa_bp.route('/api/products/delete', methods=['POST'])
+@login_required
+def api_product_delete():
+    """Elimina un prodotto e tutto lo storico acquisti correlato."""
+    _require_write()
+    data = request.get_json(force=True)
+    product_id = data.get('product_id')
+    prod = db.session.get(PantryProduct, product_id)
+    if not prod:
+        return jsonify({'ok': False, 'error': 'Prodotto non trovato'}), 404
+    try:
+        db.session.delete(prod)   # cascade elimina stock e purchases
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
 # ── Stock API ─────────────────────────────────────────────────────────────────
 
 @dispensa_bp.route('/api/stock', methods=['GET'])

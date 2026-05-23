@@ -223,6 +223,9 @@
                    value="{{ stock.quantity_current }}" id="qty-inp-{{ stock.id }}"
                    onchange="saveQty({{ stock.id }}, this.value)">
             <button class="qty-btn" onclick="changeQty({{ stock.id }}, {{ prod.id }}, 1, '{{ prod.unit }}')">+</button>
+            <button class="qty-btn" title="Elimina prodotto"
+                    onclick="deleteProduct({{ prod.id }}, '{{ prod.name }}')"
+                    style="margin-left:auto;color:var(--muted);border-color:transparent">🗑</button>
           </div>
           {% endif %}
         </div>
@@ -430,7 +433,23 @@ async function checkClaudeStatus() {
 }
 
 
-// Avvia controllo Ollama al caricamento
+/* ── Elimina prodotto ── */
+async function deleteProduct(productId, name) {
+  if (!confirm('Eliminare "' + name + '" dalla dispensa?\nVerranno eliminati anche tutti gli acquisti registrati per questo prodotto.')) return;
+  const r = await apiFetch('/dispensa/api/products/delete', { product_id: productId });
+  if (r.ok) {
+    const card = document.querySelector('[data-prod-id="' + productId + '"]');
+    if (card) {
+      card.style.transition = 'opacity .3s';
+      card.style.opacity = '0';
+      setTimeout(function() { card.remove(); }, 300);
+    }
+  } else {
+    alert('Errore: ' + (r.error || 'impossibile eliminare'));
+  }
+}
+
+// Avvia controllo Claude
 checkClaudeStatus();
 </script>
 {% endblock %}
