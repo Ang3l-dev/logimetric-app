@@ -26,6 +26,47 @@ def _get_client() -> anthropic.Anthropic | None:
     return anthropic.Anthropic(api_key=key)
 
 
+
+
+# ── Diagnostica ───────────────────────────────────────────────────────────────
+
+@dispensa_bp.route('/api/claude/status', methods=['GET'])
+@login_required
+def api_claude_status():
+    """Verifica configurazione Claude API."""
+    import sys
+    key = os.environ.get('ANTHROPIC_API_KEY', '')
+    
+    # Check anthropic installed
+    try:
+        import anthropic as _ant
+        ant_version = _ant.__version__
+    except ImportError as e:
+        return jsonify({'ok': False, 'error': f'anthropic non installato: {e}'})
+    
+    if not key:
+        return jsonify({'ok': False, 'error': 'ANTHROPIC_API_KEY non trovata nelle variabili ambiente'})
+    
+    if not key.startswith('sk-ant-'):
+        return jsonify({'ok': False, 'error': f'API key formato errato: inizia con {key[:10]}...'})
+    
+    # Test connessione reale
+    try:
+        client = _ant.Anthropic(api_key=key)
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=10,
+            messages=[{'role': 'user', 'content': 'Hi'}],
+        )
+        return jsonify({
+            'ok': True,
+            'anthropic_version': ant_version,
+            'key_prefix': key[:15] + '...',
+            'test_reply': msg.content[0].text,
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e), 'type': type(e).__name__})
+
 # ── Scan scontrino ────────────────────────────────────────────────────────────
 
 @dispensa_bp.route('/api/claude/scan', methods=['POST'])
