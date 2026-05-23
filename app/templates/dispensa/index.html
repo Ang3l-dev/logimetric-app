@@ -101,6 +101,24 @@
   .kpi-strip { grid-template-columns: 1fr 1fr !important; }
   .kpi-box .val { font-size: 1.4rem; }
 }
+
+/* ── Nucleo familiare ── */
+.family-card { background:var(--bg-card); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; margin-bottom:20px; }
+.family-header { display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
+.family-title { font-weight:700; font-size:.95rem; margin:0; }
+.family-members { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.family-member { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg-soft); border-radius:var(--radius-sm); border:1px solid var(--line); font-size:.85rem; }
+.family-member .del-member { background:none; border:none; color:var(--muted); cursor:pointer; font-size:.9rem; padding:0 0 0 4px; }
+.family-member .del-member:hover { color:var(--danger); }
+.family-add { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.family-add .input { flex:1; min-width:100px; }
+.family-summary { font-size:.82rem; color:var(--muted); margin-top:6px; }
+
+/* ── Audience badge ── */
+.audience-badge { font-size:.7rem; font-weight:700; padding:2px 6px; border-radius:10px; cursor:pointer; white-space:nowrap; }
+.audience-badge.all      { background:rgba(31,163,255,.12); color:var(--primary); }
+.audience-badge.adults   { background:rgba(61,191,124,.12); color:var(--success); }
+.audience-badge.children { background:rgba(245,166,35,.12); color:var(--warning); }
 </style>
 {% endblock %}
 
@@ -135,6 +153,30 @@
   <div class="kpi-box">
     <div class="val">{{ recent|length }}</div>
     <div class="lbl">Ultimi acquisti</div>
+  </div>
+</div>
+
+
+{# ── Nucleo familiare ── #}
+<div class="family-card" id="family-card">
+  <div class="family-header" onclick="toggleFamily()">
+    <h3 class="family-title">👨‍👩‍👧 Nucleo familiare</h3>
+    <span id="family-chevron" style="color:var(--muted)">▼</span>
+  </div>
+  <div id="family-body" style="display:none">
+    <div class="family-summary" id="family-summary">Caricamento...</div>
+    <div class="family-members" id="family-members"></div>
+    {% if current_user.can_write('dispensa') %}
+    <div class="family-add">
+      <input class="input" id="fam-name" placeholder="Nome" style="min-width:90px">
+      <select class="input" id="fam-type" style="flex:none;width:100px">
+        <option value="adult">Adulto</option>
+        <option value="child">Bambino</option>
+      </select>
+      <input class="input" type="number" id="fam-year" placeholder="Anno nascita" style="width:120px;flex:none" min="1920" max="2025">
+      <button class="btn btn-sm btn-primary" onclick="addFamilyMember()">+ Aggiungi</button>
+    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -210,7 +252,16 @@
              data-cat="{{ prod.category }}" data-stock-id="{{ stock.id }}" data-prod-id="{{ prod.id }}" data-unit="{{ prod.unit }}">
           <div>
             <div class="stock-name">{{ prod.name }}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
             <div class="stock-cat">{{ prod.category }}</div>
+            <span class="audience-badge {{ prod.target_audience }}"
+                  onclick="cycleAudience({{ prod.id }}, this)"
+                  title="Clicca per cambiare">
+              {% if prod.target_audience == 'adults' %}👨 Adulti
+              {% elif prod.target_audience == 'children' %}👶 Bambini
+              {% else %}👪 Tutti{% endif %}
+            </span>
+          </div>
           </div>
           <div class="stock-qty">
             <span id="qty-display-{{ stock.id }}">{{ stock.quantity_current }}</span>
@@ -402,6 +453,70 @@ async function generateShoppingList() {
     btn.disabled = false;
     btn.textContent = '✨ Rigenera lista';
   }
+}
+
+
+/* ── Nucleo familiare ── */
+let familyOpen = false;
+
+function toggleFamily() {
+  familyOpen = !familyOpen;
+  document.getElementById('family-body').style.display = familyOpen ? '' : 'none';
+  document.getElementById('family-chevron').textContent = familyOpen ? '▲' : '▼';
+  if (familyOpen) loadFamily();
+}
+
+async function loadFamily() {
+  const r = await fetch('/dispensa/api/family');
+  const members = await r.json();
+  renderFamily(members);
+}
+
+function renderFamily(members) {
+  const el = document.getElementById('family-members');
+  const summary = document.getElementById('family-summary');
+  const adults = members.filter(m => m.member_type === 'adult').length;
+  const children = members.filter(m => m.member_type === 'child');
+  summary.textContent = members.length
+    ? adults + ' adult' + (adults !== 1 ? 'i' : 'o') +
+      (children.length ? ' · ' + children.length + ' bambin' + (children.length !== 1 ? 'i' : 'o') : '')
+    : 'Nessun membro configurato — aggiungine uno per migliorare le previsioni IA.';
+
+  el.innerHTML = members.map(m => {
+    const icon = m.member_type === 'adult' ? '👨' : '👶';
+    return '<div class="family-member">' +
+      '<span>' + icon + ' ' + m.name + '</span>' +
+      '<span style="color:var(--muted);font-size:.78rem">' + m.age_label + '</span>' +
+      '<button class="del-member" onclick="delFamilyMember(' + m.id + ', this)">✕</button>' +
+      '</div>';
+  }).join('');
+}
+
+async function addFamilyMember() {
+  const name = document.getElementById('fam-name').value.trim();
+  const type = document.getElementById('fam-type').value;
+  const year = document.getElementById('fam-year').value;
+  if (!name) { alert('Inserisci il nome'); return; }
+  const r = await apiFetch('/dispensa/api/family/add', { name, member_type: type, birth_year: year ? parseInt(year) : null });
+  if (r.ok) { document.getElementById('fam-name').value = ''; document.getElementById('fam-year').value = ''; loadFamily(); }
+  else alert('Errore: ' + r.error);
+}
+
+async function delFamilyMember(id, btn) {
+  const r = await apiFetch('/dispensa/api/family/delete', { id });
+  if (r.ok) { btn.closest('.family-member').remove(); loadFamily(); }
+}
+
+/* ── Classificazione audience prodotto ── */
+const audienceLabels = { all: '👪 Tutti', adults: '👨 Adulti', children: '👶 Bambini' };
+const audienceCycle  = { all: 'adults', adults: 'children', children: 'all' };
+
+async function cycleAudience(productId, badge) {
+  const current = Object.keys(audienceLabels).find(k => badge.classList.contains(k)) || 'all';
+  const next = audienceCycle[current];
+  badge.className = 'audience-badge ' + next;
+  badge.textContent = audienceLabels[next];
+  await apiFetch('/dispensa/api/products/set-audience', { product_id: productId, target_audience: next });
 }
 
 async function checkClaudeStatus() {

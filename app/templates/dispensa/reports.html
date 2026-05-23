@@ -118,6 +118,21 @@
 
 </div>
 
+{# Confronto supermercati #}
+<div class="charts-grid" style="margin-bottom:20px">
+  <div class="chart-card" style="grid-column:span 2">
+    <div class="chart-title">🏪 Prezzo medio per unità per categoria × supermercato</div>
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 12px">Il prezzo più basso per categoria è evidenziato in verde.</p>
+    <div id="avg-price-table">Caricamento...</div>
+  </div>
+  <div class="chart-card" style="grid-column:span 2">
+    <div class="chart-title">💳 Spesa totale per categoria × supermercato</div>
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 12px">La spesa più alta è evidenziata in rosso.</p>
+    <div id="total-spend-table">Caricamento...</div>
+  </div>
+</div>
+
+
 <script>
 let dailyChart = null;
 let catChart   = null;
@@ -128,6 +143,63 @@ const chartDefaults = {
 };
 Chart.defaults.color = chartDefaults.color;
 Chart.defaults.font  = chartDefaults.font;
+
+/* ── Confronto supermercati ── */
+async function loadStoreCompare(period) {
+  const r = await fetch('/dispensa/api/reports/store-compare?period=' + period);
+  const d = await r.json();
+  renderAvgTable(d);
+  renderTotalTable(d);
+}
+
+function renderAvgTable(d) {
+  const el = document.getElementById('avg-price-table');
+  if (!d.stores.length) { el.innerHTML = '<p style="color:var(--muted);font-size:.85rem">Nessun dato — registra acquisti con il nome del supermercato.</p>'; return; }
+  let html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem">';
+  html += '<thead><tr><th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);color:var(--muted)">Categoria</th>';
+  d.stores.forEach(s => html += '<th style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--line);color:var(--muted)">' + s + '</th>');
+  html += '</tr></thead><tbody>';
+  d.categories.forEach(cat => {
+    html += '<tr><td style="padding:6px 10px;border-bottom:1px solid var(--line-soft);font-weight:600">' + cat + '</td>';
+    const vals = d.stores.map(s => d.avg_price[cat] && d.avg_price[cat][s] ? d.avg_price[cat][s] : null);
+    const min = Math.min(...vals.filter(v => v !== null));
+    d.stores.forEach((s, i) => {
+      const v = vals[i];
+      const isBest = v !== null && v === min && vals.filter(x => x !== null).length > 1;
+      html += '<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--line-soft);' +
+        (isBest ? 'color:var(--success);font-weight:700' : 'color:var(--muted)') + '">' +
+        (v !== null ? '€' + v : '—') + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function renderTotalTable(d) {
+  const el = document.getElementById('total-spend-table');
+  if (!d.stores.length) { el.innerHTML = ''; return; }
+  let html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem">';
+  html += '<thead><tr><th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);color:var(--muted)">Categoria</th>';
+  d.stores.forEach(s => html += '<th style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--line);color:var(--muted)">' + s + '</th>');
+  html += '</tr></thead><tbody>';
+  d.categories.forEach(cat => {
+    html += '<tr><td style="padding:6px 10px;border-bottom:1px solid var(--line-soft);font-weight:600">' + cat + '</td>';
+    const vals = d.stores.map(s => d.total_spend[cat] && d.total_spend[cat][s] ? d.total_spend[cat][s] : null);
+    const max = Math.max(...vals.filter(v => v !== null));
+    d.stores.forEach((s, i) => {
+      const v = vals[i];
+      const isMax = v !== null && v === max && vals.filter(x => x !== null).length > 1;
+      html += '<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--line-soft);' +
+        (isMax ? 'color:var(--danger)' : 'color:var(--muted)') + '">' +
+        (v !== null ? '€' + v : '—') + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
 
 async function loadData(period, btn) {
   document.querySelectorAll('.ptab').forEach(b => b.classList.remove('active'));
@@ -160,6 +232,7 @@ async function loadData(period, btn) {
 
   // Confronto mesi
   renderMonthCompare(d.month_compare);
+  loadStoreCompare(period);
 }
 
 function renderDailyChart(labels, values) {

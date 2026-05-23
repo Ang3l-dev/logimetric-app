@@ -126,6 +126,69 @@ usa null se non leggibile. Solo JSON."""
         return jsonify({'ok': False, 'error': str(e), 'type': type(e).__name__}), 500
 
 
+
+# ── Classificazione automatica prodotti ───────────────────────────────────────
+
+@dispensa_bp.route('/api/claude/classify-products', methods=['POST'])
+@login_required
+def api_claude_classify_products():
+    """Classifica in background i prodotti appena aggiunti."""
+    if not os.environ.get('ANTHROPIC_API_KEY'):
+        return jsonify({'ok': False, 'error': 'API key mancante'}), 500
+
+    data = request.get_json(force=True)
+    product_ids = data.get('product_ids', [])
+    if not product_ids:
+        return jsonify({'ok': True, 'classified': 0})
+
+    from .models_dispensa import PantryProduct
+    from .. import db as _db
+
+    products = PantryProduct.query.filter(
+        PantryProduct.id.in_(product_ids),
+        PantryProduct.target_audience == 'all'
+    ).all()
+
+    if not products:
+        return jsonify({'ok': True, 'classified': 0})
+
+    names_list = [p.name for p in products]
+    prompt = (
+        "Classifica questi prodotti italiani per un nucleo familiare. "
+        "Per ogni prodotto: target_audience (all/adults/children), age_min, age_max. "
+        "Esempi: Vino=adults age_min:18, Pannolini=children age_max:3, Pasta=all. "
+        "Prodotti: " + json.dumps(names_list, ensure_ascii=False) + ". "
+        "Rispondi SOLO con JSON: "
+        '{"products":[{"nome":"nome","target_audience":"all","age_min":null,"age_max":null}]}'
+    )
+
+    try:
+        raw = _claude(messages=[{'role': 'user', 'content': prompt}],
+                      fast=True, max_tokens=1000)
+        m = re.search(r'\{[\s\S]*\}', raw)
+        if not m:
+            return jsonify({'ok': False, 'error': 'JSON non parsabile'}), 500
+
+        result = json.loads(m.group(0))
+        classified = 0
+        prod_map = {p.name: p for p in products}
+
+        for item in result.get('products', []):
+            prod = prod_map.get(item.get('nome'))
+            if prod:
+                prod.target_audience = item.get('target_audience', 'all')
+                prod.age_min = item.get('age_min')
+                prod.age_max = item.get('age_max')
+                classified += 1
+
+        _db.session.commit()
+        return jsonify({'ok': True, 'classified': classified})
+
+    except Exception as e:
+        _db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 # ── Lista della spesa ─────────────────────────────────────────────────────────
 
 @dispensa_bp.route('/api/claude/shopping-list', methods=['POST'])
@@ -162,13 +225,23 @@ def api_claude_shopping_list():
         'esaurimento': s.is_low,
     } for s, prod in stocks}
 
+    # Recupera profilo famiglia
+    from .models_dispensa import PantryFamilyMember
+    members = PantryFamilyMember.query.all()
+    family_profile = {
+        'adulti': len([m for m in members if m.member_type == 'adult']),
+        'bambini': [{'nome': m.name, 'eta': m.age} for m in members if m.member_type == 'child'],
+        'totale': len(members),
+    }
+
     context = {
         'data_oggi': date.today().strftime('%Y-%m-%d'),
+        'nucleo_familiare': family_profile,
         'prodotti': list(by_product.values()),
         'stock': stock_map,
     }
 
-    prompt = f"""Sei un assistente per la spesa domestica italiana.
+    prompt = f"""Sei un assistente per la spesa domestica italiana. Il nucleo familiare è composto da {family_profile["adulti"]} adulto/i e {len(family_profile["bambini"])} bambino/i ({", ".join([c["nome"]+" "+str(c["eta"])+" anni" for c in family_profile["bambini"]]) if family_profile["bambini"] else "nessuno"}).
 Analizza questi dati e genera la lista della spesa per la prossima settimana.
 
 DATI: {json.dumps(context, ensure_ascii=False)}

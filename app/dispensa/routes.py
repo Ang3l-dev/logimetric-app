@@ -15,6 +15,7 @@ from . import dispensa_bp
 from .. import db
 from .models_dispensa import (
     PantryProduct, PantryPurchase, PantryStock, PantryHousehold,
+    PantryFamilyMember,
     PANTRY_CATEGORIES, PANTRY_UNITS,
 )
 
@@ -153,7 +154,9 @@ def api_save_purchase():
             saved.append(prod.name)
 
         db.session.commit()
-        return jsonify({'ok': True, 'saved': saved, 'count': len(saved)})
+        # Recupera gli ID dei prodotti salvati per la classificazione
+        saved_ids = [PantryProduct.query.filter_by(name=n).first().id for n in saved if PantryProduct.query.filter_by(name=n).first()]
+        return jsonify({'ok': True, 'saved': saved, 'count': len(saved), 'product_ids': saved_ids})
 
     except Exception as exc:
         db.session.rollback()
@@ -427,6 +430,103 @@ def api_reports_data():
     })
 
 
+
+# ── Nucleo familiare ──────────────────────────────────────────────────────────
+
+@dispensa_bp.route('/api/family', methods=['GET'])
+@login_required
+def api_family_list():
+    _require_view()
+    members = PantryFamilyMember.query.order_by(PantryFamilyMember.created_at).all()
+    return jsonify([{
+        'id':          m.id,
+        'name':        m.name,
+        'member_type': m.member_type,
+        'birth_year':  m.birth_year,
+        'age':         m.age,
+        'age_label':   m.age_label,
+    } for m in members])
+
+
+@dispensa_bp.route('/api/family/add', methods=['POST'])
+@login_required
+def api_family_add():
+    _require_write()
+    data = request.get_json(force=True)
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': 'Nome obbligatorio'}), 400
+    member = PantryFamilyMember(
+        name=name,
+        member_type=data.get('member_type', 'adult'),
+        birth_year=data.get('birth_year') or None,
+    )
+    db.session.add(member)
+    try:
+        db.session.commit()
+        return jsonify({'ok': True, 'id': member.id, 'age_label': member.age_label})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@dispensa_bp.route('/api/family/delete', methods=['POST'])
+@login_required
+def api_family_delete():
+    _require_write()
+    data = request.get_json(force=True)
+    member = db.session.get(PantryFamilyMember, data.get('id'))
+    if not member:
+        return jsonify({'ok': False, 'error': 'Membro non trovato'}), 404
+    db.session.delete(member)
+    try:
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ── Classificazione prodotti ──────────────────────────────────────────────────
+
+@dispensa_bp.route('/api/products/set-audience', methods=['POST'])
+@login_required
+def api_product_set_audience():
+    """Aggiorna manualmente la classificazione adulti/bambini di un prodotto."""
+    _require_write()
+    data = request.get_json(force=True)
+    prod = db.session.get(PantryProduct, data.get('product_id'))
+    if not prod:
+        return jsonify({'ok': False, 'error': 'Prodotto non trovato'}), 404
+    prod.target_audience = data.get('target_audience', 'all')
+    prod.age_min = data.get('age_min') or None
+    prod.age_max = data.get('age_max') or None
+    try:
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ── Contesto famiglia per AI ──────────────────────────────────────────────────
+
+@dispensa_bp.route('/api/family/context', methods=['GET'])
+@login_required
+def api_family_context():
+    """Restituisce il profilo famiglia per l'AI."""
+    _require_view()
+    members = PantryFamilyMember.query.all()
+    adults  = [m for m in members if m.member_type == 'adult']
+    children = [m for m in members if m.member_type == 'child']
+    return jsonify({
+        'totale_membri': len(members),
+        'adulti': len(adults),
+        'bambini': [{'nome': c.name, 'eta': c.age} for c in children],
+        'membri': [{'nome': m.name, 'tipo': m.member_type, 'eta': m.age} for m in members],
+    })
+
+
 # ── Household ─────────────────────────────────────────────────────────────────
 
 @dispensa_bp.route('/api/household/join', methods=['POST'])
@@ -445,3 +545,48 @@ def api_household_join():
     except Exception as exc:
         db.session.rollback()
         return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+# ── Confronto supermercati ────────────────────────────────────────────────────
+
+@dispensa_bp.route('/api/reports/store-compare', methods=['GET'])
+@login_required
+def api_store_compare():
+    _require_view()
+    from datetime import timedelta
+    period = request.args.get('period', 'month')
+    today = date.today()
+    cutoff = today - timedelta(days=7 if period=='week' else 365 if period=='year' else 30)
+
+    rows = (db.session.query(
+        PantryPurchase.store,
+        PantryProduct.category,
+        func.sum(PantryPurchase.price_total).label('total'),
+        func.sum(PantryPurchase.quantity).label('qty'),
+        func.count(PantryPurchase.id).label('n'),
+    )
+    .join(PantryProduct)
+    .filter(PantryPurchase.purchase_date >= cutoff,
+            PantryPurchase.store.isnot(None),
+            PantryPurchase.store != '')
+    .group_by(PantryPurchase.store, PantryProduct.category)
+    .all())
+
+    # Aggregazione per supermercato × categoria
+    stores = sorted(set(r.store for r in rows))
+    cats   = sorted(set(r.category for r in rows))
+
+    # avg price per unit per store per category
+    avg_table = {}
+    total_table = {}
+    for r in rows:
+        avg_table.setdefault(r.category, {})[r.store] = round(float(r.total) / float(r.qty), 2) if r.qty else 0
+        total_table.setdefault(r.category, {})[r.store] = round(float(r.total), 2)
+
+    return jsonify({
+        'stores': stores,
+        'categories': cats,
+        'avg_price': avg_table,
+        'total_spend': total_table,
+    })
+

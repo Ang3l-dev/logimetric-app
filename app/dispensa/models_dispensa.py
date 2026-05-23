@@ -25,8 +25,11 @@ class PantryProduct(db.Model):
     name       = db.Column(db.String(200), nullable=False)
     category   = db.Column(db.String(100), default='Altro')
     unit       = db.Column(db.String(20), default='pz')
-    barcode    = db.Column(db.String(60), unique=True, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    barcode          = db.Column(db.String(60), unique=True, nullable=True)
+    target_audience  = db.Column(db.String(20), default='all')  # all | adults | children
+    age_min          = db.Column(db.Integer, nullable=True)
+    age_max          = db.Column(db.Integer, nullable=True)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
 
     purchases = db.relationship('PantryPurchase', backref='product', lazy='dynamic',
                                 cascade='all, delete-orphan')
@@ -112,3 +115,33 @@ class PantryHousehold(db.Model):
 
     def __repr__(self) -> str:
         return f'<PantryHousehold user={self.user_id} role={self.role}>'
+
+
+class PantryFamilyMember(db.Model):
+    """Membro del nucleo familiare — usato dall'IA per stimare i consumi."""
+    __tablename__ = 'pantry_family_members'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    name        = db.Column(db.String(100), nullable=False)
+    member_type = db.Column(db.String(20), default='adult')  # 'adult' | 'child'
+    birth_year  = db.Column(db.Integer, nullable=True)
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def age(self) -> int | None:
+        if self.birth_year:
+            from datetime import date
+            return date.today().year - self.birth_year
+        return None
+
+    @property
+    def age_label(self) -> str:
+        if self.member_type == 'adult':
+            return 'Adulto'
+        age = self.age
+        if age is not None:
+            return f'Bambino ({age} anni)'
+        return 'Bambino'
+
+    def __repr__(self) -> str:
+        return f'<PantryFamilyMember {self.name} {self.member_type}>'

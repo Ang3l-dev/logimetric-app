@@ -450,6 +450,14 @@ async function confirmPurchase() {
     var data = await r.json();
     if (data.ok) {
       saveStatus.innerHTML = '<span style="color:var(--success)">✅ Salvati ' + data.count + ' prodotti!</span>';
+      // Classificazione automatica in background
+      if (data.product_ids && data.product_ids.length > 0) {
+        fetch('/dispensa/api/claude/classify-products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+          body: JSON.stringify({ product_ids: data.product_ids }),
+        }).catch(function() {}); // ignora errori - è background
+      }
       setTimeout(function() { window.location.href = '/dispensa/'; }, 1200);
     } else {
       saveStatus.innerHTML = '<span style="color:var(--danger)">❌ Errore: ' + data.error + '</span>';
