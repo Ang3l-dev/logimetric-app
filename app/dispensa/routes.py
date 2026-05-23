@@ -15,7 +15,7 @@ from . import dispensa_bp
 from .. import db
 from .models_dispensa import (
     PantryProduct, PantryPurchase, PantryStock, PantryHousehold,
-    PantryFamilyMember,
+    PantryFamilyMember, PantryShoppingSession, PantryShoppingItem,
     PANTRY_CATEGORIES, PANTRY_UNITS,
 )
 
@@ -93,6 +93,14 @@ def index():
                            month_spend=month_spend,
                            categories=PANTRY_CATEGORIES,
                            units=PANTRY_UNITS)
+
+
+
+@dispensa_bp.route('/lista-spesa')
+@login_required
+def todo():
+    _require_view()
+    return render_template('dispensa/todo.html')
 
 
 # ── Scanner scontrino ─────────────────────────────────────────────────────────
@@ -589,4 +597,139 @@ def api_store_compare():
         'avg_price': avg_table,
         'total_spend': total_table,
     })
+
+
+
+# ── Lista spesa Todo ──────────────────────────────────────────────────────────
+
+@dispensa_bp.route('/api/shopping-session/active', methods=['GET'])
+@login_required
+def api_shopping_session_active():
+    """Restituisce la sessione di spesa attiva, se esiste."""
+    _require_view()
+    session = PantryShoppingSession.query.filter_by(is_active=True)        .order_by(PantryShoppingSession.created_at.desc()).first()
+    if not session:
+        return jsonify({'ok': True, 'session': None})
+    items = session.items.all()
+    return jsonify({'ok': True, 'session': {
+        'id': session.id,
+        'created_at': session.created_at.strftime('%d/%m/%Y %H:%M'),
+        'note': session.note,
+        'items': [{
+            'id': i.id, 'product_name': i.product_name,
+            'quantity': i.quantity, 'unit': i.unit,
+            'checked': i.checked, 'sort_order': i.sort_order,
+        } for i in items],
+        'total': len(items),
+        'checked': sum(1 for i in items if i.checked),
+    }})
+
+
+@dispensa_bp.route('/api/shopping-session/create', methods=['POST'])
+@login_required
+def api_shopping_session_create():
+    """Crea una nuova sessione con i prodotti dalla lista IA."""
+    _require_write()
+    data = request.get_json(force=True)
+    items_data = data.get('items', [])
+    note = data.get('note', '')
+
+    # Chiudi eventuali sessioni attive precedenti
+    PantryShoppingSession.query.filter_by(is_active=True)        .update({'is_active': False, 'closed_at': datetime.utcnow()})
+
+    session = PantryShoppingSession(note=note)
+    db.session.add(session)
+    db.session.flush()
+
+    for i, item in enumerate(items_data):
+        db.session.add(PantryShoppingItem(
+            session_id=session.id,
+            product_name=item.get('prodotto', item.get('product_name', '')),
+            quantity=float(item.get('quantita', item.get('quantity', 1))),
+            unit=item.get('unita', item.get('unit', 'pz')),
+            sort_order=i,
+        ))
+
+    try:
+        db.session.commit()
+        return jsonify({'ok': True, 'session_id': session.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@dispensa_bp.route('/api/shopping-session/toggle', methods=['POST'])
+@login_required
+def api_shopping_session_toggle():
+    """Spunta/deseleziona un prodotto nella lista."""
+    _require_write()
+    data = request.get_json(force=True)
+    item = db.session.get(PantryShoppingItem, data.get('item_id'))
+    if not item:
+        return jsonify({'ok': False, 'error': 'Item non trovato'}), 404
+    item.checked = not item.checked
+    try:
+        db.session.commit()
+        return jsonify({'ok': True, 'checked': item.checked})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@dispensa_bp.route('/api/shopping-session/add-item', methods=['POST'])
+@login_required
+def api_shopping_session_add_item():
+    """Aggiunge un prodotto alla sessione attiva."""
+    _require_write()
+    data = request.get_json(force=True)
+    session = PantryShoppingSession.query.filter_by(is_active=True)        .order_by(PantryShoppingSession.created_at.desc()).first()
+    if not session:
+        return jsonify({'ok': False, 'error': 'Nessuna sessione attiva'}), 404
+    count = session.items.count()
+    item = PantryShoppingItem(
+        session_id=session.id,
+        product_name=data.get('product_name', '').strip(),
+        quantity=float(data.get('quantity', 1)),
+        unit=data.get('unit', 'pz'),
+        sort_order=count,
+    )
+    db.session.add(item)
+    try:
+        db.session.commit()
+        return jsonify({'ok': True, 'item_id': item.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@dispensa_bp.route('/api/shopping-session/delete-item', methods=['POST'])
+@login_required
+def api_shopping_session_delete_item():
+    """Elimina un prodotto dalla lista."""
+    _require_write()
+    data = request.get_json(force=True)
+    item = db.session.get(PantryShoppingItem, data.get('item_id'))
+    if not item:
+        return jsonify({'ok': False, 'error': 'Item non trovato'}), 404
+    db.session.delete(item)
+    try:
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@dispensa_bp.route('/api/shopping-session/close', methods=['POST'])
+@login_required
+def api_shopping_session_close():
+    """Chiude la sessione corrente."""
+    _require_write()
+    PantryShoppingSession.query.filter_by(is_active=True)        .update({'is_active': False, 'closed_at': datetime.utcnow()})
+    try:
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
 

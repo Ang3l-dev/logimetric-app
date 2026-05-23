@@ -104,6 +104,28 @@
   </a>
   {% endif %}
 
+
+  {% if current_user.can_view('dispensa') %}
+  <a href="{{ url_for('dispensa.index') }}" class="home-card">
+    <div class="home-card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="5" width="18" height="16" rx="2"/>
+        <path d="M8 5V3M16 5V3"/>
+        <path d="M7 12h2M12 12h5M7 16h2M12 16h3"/>
+      </svg>
+    </div>
+    <div class="home-card-body">
+      <div class="home-card-title">Dispensa</div>
+      <div class="home-card-desc">Gestisci scorte, acquisti e lista della spesa con IA integrata.</div>
+    </div>
+    {% if current_user.can_write('dispensa') %}
+    <span class="home-card-badge badge-write">Lettura + Scrittura</span>
+    {% else %}
+    <span class="home-card-badge badge-read">Solo lettura</span>
+    {% endif %}
+  </a>
+  {% endif %}
+
   {% if current_user.is_admin %}
   <a href="{{ url_for('admin.users') }}" class="home-card home-card-admin">
     <div class="home-card-icon">

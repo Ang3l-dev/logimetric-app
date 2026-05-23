@@ -305,10 +305,21 @@
       <p style="color:var(--muted);font-size:.85rem;margin:0 0 12px">
         Basata sulle tue abitudini di acquisto degli ultimi 90 giorni. Powered by Claude AI.
       </p>
-      <button class="btn btn-outline btn-full" id="ai-btn" onclick="generateShoppingList()" disabled>
-        Genera lista della spesa
-      </button>
+      <div style="display:flex;gap:8px;margin-bottom:2px">
+        <button class="btn btn-outline" style="flex:1" id="ai-btn" onclick="generateShoppingList()" disabled>
+          ✨ Genera lista
+        </button>
+        <a href="{{ url_for('dispensa.todo') }}" id="open-todo-btn"
+           class="btn btn-primary" style="display:none;white-space:nowrap">
+          🛒 Apri lista
+        </a>
+      </div>
       <div id="ai-result" style="margin-top:14px"></div>
+      <div id="save-list-wrap" style="display:none;margin-top:10px">
+        <button class="btn btn-primary btn-full" onclick="saveShoppingList()">
+          📋 Salva come lista spesa
+        </button>
+      </div>
     </div>
 
     {# Ultimi acquisti #}
@@ -449,9 +460,31 @@ async function generateShoppingList() {
 
   } catch(e) {
     resultDiv.innerHTML = '<p style="color:var(--danger);font-size:.85rem">Errore di rete: ' + e.message + '</p>';
+    // Mostra bottone salva
+    if (json.data && json.data.lista && json.data.lista.length > 0) {
+      document.getElementById('save-list-wrap').style.display = '';
+      window._lastShoppingList = json.data;
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = '✨ Rigenera lista';
+  }
+}
+
+async function saveShoppingList() {
+  const data = window._lastShoppingList;
+  if (!data || !data.lista) return;
+  const r = await fetch('/dispensa/api/shopping-session/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ items: data.lista, note: data.note || '' }),
+  });
+  const j = await r.json();
+  if (j.ok) {
+    document.getElementById('save-list-wrap').style.display = 'none';
+    document.getElementById('open-todo-btn').style.display = '';
+    document.getElementById('ai-result').innerHTML +=
+      '<p style="color:var(--success);font-size:.85rem;margin:8px 0 0">✅ Lista salvata! Clicca "Apri lista" per spuntare i prodotti.</p>';
   }
 }
 
@@ -519,6 +552,20 @@ async function cycleAudience(productId, badge) {
   await apiFetch('/dispensa/api/products/set-audience', { product_id: productId, target_audience: next });
 }
 
+async function checkActiveSession() {
+  try {
+    const r = await fetch('/dispensa/api/shopping-session/active');
+    const j = await r.json();
+    if (j.ok && j.session) {
+      const btn = document.getElementById('open-todo-btn');
+      if (btn) {
+        btn.style.display = '';
+        btn.textContent = '🛒 Lista aperta (' + j.session.checked + '/' + j.session.total + ')';
+      }
+    }
+  } catch(e) {}
+}
+
 async function checkClaudeStatus() {
   const el = document.getElementById('ollama-status');
   const btn = document.getElementById('ai-btn');
@@ -566,5 +613,6 @@ async function deleteProduct(productId, name) {
 
 // Avvia controllo Claude
 checkClaudeStatus();
+checkActiveSession();
 </script>
 {% endblock %}

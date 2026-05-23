@@ -1,0 +1,217 @@
+{% extends 'base.html' %}
+{% block title %}Lista Spesa — LogiMetric{% endblock %}
+
+{% block head %}
+<style>
+.todo-wrap { max-width: 560px; margin: 0 auto; }
+.todo-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px; }
+.todo-meta { font-size:.82rem; color:var(--muted); margin-top:4px; }
+
+.todo-list { display:flex; flex-direction:column; gap:6px; margin-bottom:20px; }
+.todo-item {
+  display:flex; align-items:center; gap:12px;
+  padding:14px 16px; background:var(--bg-card);
+  border:1px solid var(--line); border-radius:var(--radius-sm);
+  transition: all .15s; cursor:pointer; user-select:none;
+}
+.todo-item:hover { border-color:rgba(255,255,255,.15); }
+.todo-item.checked { opacity:.5; }
+.todo-item.checked .todo-name { text-decoration:line-through; color:var(--muted); }
+
+.todo-check {
+  width:22px; height:22px; border-radius:6px;
+  border:2px solid var(--line); background:transparent;
+  display:grid; place-items:center; flex-shrink:0;
+  transition:all .15s;
+}
+.todo-item.checked .todo-check {
+  background:var(--success); border-color:var(--success);
+}
+.todo-item.checked .todo-check::after { content:'✓'; color:#fff; font-size:.85rem; font-weight:700; }
+
+.todo-name  { flex:1; font-weight:600; font-size:.95rem; }
+.todo-qty   { font-size:.82rem; color:var(--muted); white-space:nowrap; }
+.todo-del   { background:none; border:none; color:var(--muted); font-size:1rem;
+              cursor:pointer; padding:2px 6px; border-radius:4px; opacity:0; transition:.15s; }
+.todo-item:hover .todo-del { opacity:1; }
+.todo-del:hover { color:var(--danger); background:rgba(224,92,92,.1); }
+
+.progress-bar-bg { height:6px; background:var(--line); border-radius:3px; margin-bottom:20px; overflow:hidden; }
+.progress-bar    { height:100%; border-radius:3px; background:var(--success); transition:width .4s; }
+
+.add-item-row { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+.add-item-row .input { flex:2; min-width:120px; }
+.add-item-row .input-sm { flex:1; min-width:60px; max-width:90px; }
+
+.empty-todo { text-align:center; padding:48px 20px; color:var(--muted); }
+.empty-todo .icon { font-size:2.5rem; margin-bottom:12px; }
+
+.done-banner {
+  background:rgba(61,191,124,.1); border:1px solid rgba(61,191,124,.25);
+  border-radius:var(--radius-sm); padding:14px 18px;
+  display:flex; align-items:center; gap:12px;
+  margin-bottom:20px; font-weight:600; color:var(--success);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="todo-wrap">
+
+  <div class="todo-header">
+    <div>
+      <h1>🛒 Lista della spesa</h1>
+      <div class="todo-meta" id="todo-meta">Caricamento...</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="{{ url_for('dispensa.index') }}" class="btn btn-outline">← Dispensa</a>
+      <button class="btn btn-outline" onclick="closeSession()"
+              style="color:var(--danger);border-color:rgba(224,92,92,.3)">✓ Chiudi lista</button>
+    </div>
+  </div>
+
+  {# Banner completamento #}
+  <div id="done-banner" style="display:none" class="done-banner">
+    🎉 Hai preso tutto! Chiudi la lista quando sei pronto.
+  </div>
+
+  {# Barra progresso #}
+  <div class="progress-bar-bg">
+    <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+  </div>
+
+  {# Lista items #}
+  <div class="todo-list" id="todo-list">
+    <div class="empty-todo">
+      <div class="icon">📋</div>
+      <div>Caricamento lista...</div>
+    </div>
+  </div>
+
+  {# Aggiungi manualmente #}
+  <div class="card" style="margin-bottom:16px">
+    <div style="font-weight:600;font-size:.9rem;margin-bottom:12px">+ Aggiungi prodotto</div>
+    <div class="add-item-row">
+      <input class="input" id="new-name" placeholder="Nome prodotto" onkeydown="if(event.key==='Enter')addItem()">
+      <input class="input input-sm" type="number" id="new-qty" value="1" min="0.1" step="0.1">
+      <select class="input input-sm" id="new-unit">
+        <option>pz</option><option>kg</option><option>g</option>
+        <option>l</option><option>ml</option><option>conf</option><option>bott</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="addItem()">+</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+let sessionData = null;
+
+async function loadSession() {
+  const r = await fetch('/dispensa/api/shopping-session/active');
+  const j = await r.json();
+  if (!j.ok || !j.session) {
+    window.location.href = '/dispensa/';
+    return;
+  }
+  sessionData = j.session;
+  renderSession();
+}
+
+function renderSession() {
+  const s = sessionData;
+  const items = s.items || [];
+  const nChecked = items.filter(i => i.checked).length;
+  const pct = items.length ? Math.round(nChecked / items.length * 100) : 0;
+
+  document.getElementById('todo-meta').textContent =
+    'Creata il ' + s.created_at + ' · ' + nChecked + '/' + items.length + ' prodotti';
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('done-banner').style.display =
+    (items.length > 0 && nChecked === items.length) ? '' : 'none';
+
+  const list = document.getElementById('todo-list');
+  if (!items.length) {
+    list.innerHTML = '<div class="empty-todo"><div class="icon">📋</div><div style="font-size:1rem;font-weight:600;margin-bottom:6px">Lista vuota</div><div>Aggiungi prodotti qui sotto o genera la lista dalla Dispensa.</div></div>';
+    return;
+  }
+
+  // Ordina: non spuntati prima, spuntati dopo
+  const sorted = [...items].sort((a, b) => a.checked - b.checked || a.sort_order - b.sort_order);
+
+  list.innerHTML = sorted.map(item => `
+    <div class="todo-item ${item.checked ? 'checked' : ''}"
+         id="item-${item.id}" onclick="toggleItem(${item.id})">
+      <div class="todo-check"></div>
+      <div class="todo-name">${escH(item.product_name)}</div>
+      <div class="todo-qty">${item.quantity} ${item.unit}</div>
+      <button class="todo-del" onclick="event.stopPropagation();deleteItem(${item.id})" title="Rimuovi">🗑</button>
+    </div>
+  `).join('');
+}
+
+async function toggleItem(itemId) {
+  const r = await fetch('/dispensa/api/shopping-session/toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ item_id: itemId }),
+  });
+  const j = await r.json();
+  if (j.ok) {
+    const item = sessionData.items.find(i => i.id === itemId);
+    if (item) item.checked = j.checked;
+    renderSession();
+  }
+}
+
+async function deleteItem(itemId) {
+  const r = await fetch('/dispensa/api/shopping-session/delete-item', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ item_id: itemId }),
+  });
+  if ((await r.json()).ok) {
+    sessionData.items = sessionData.items.filter(i => i.id !== itemId);
+    renderSession();
+  }
+}
+
+async function addItem() {
+  const name = document.getElementById('new-name').value.trim();
+  if (!name) { document.getElementById('new-name').focus(); return; }
+  const qty  = parseFloat(document.getElementById('new-qty').value) || 1;
+  const unit = document.getElementById('new-unit').value;
+
+  const r = await fetch('/dispensa/api/shopping-session/add-item', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ product_name: name, quantity: qty, unit }),
+  });
+  const j = await r.json();
+  if (j.ok) {
+    sessionData.items.push({ id: j.item_id, product_name: name,
+      quantity: qty, unit, checked: false, sort_order: sessionData.items.length });
+    document.getElementById('new-name').value = '';
+    document.getElementById('new-qty').value = '1';
+    renderSession();
+  }
+}
+
+async function closeSession() {
+  if (!confirm('Chiudere la lista della spesa?\nPotrà essere rigenerata dalla Dispensa.')) return;
+  await fetch('/dispensa/api/shopping-session/close', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({}),
+  });
+  window.location.href = '/dispensa/';
+}
+
+function escH(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+}
+
+loadSession();
+</script>
+{% endblock %}

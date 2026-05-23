@@ -145,3 +145,38 @@ class PantryFamilyMember(db.Model):
 
     def __repr__(self) -> str:
         return f'<PantryFamilyMember {self.name} {self.member_type}>'
+
+
+class PantryShoppingSession(db.Model):
+    """Lista della spesa attiva — rimane aperta finché l'utente non la chiude."""
+    __tablename__ = 'pantry_shopping_sessions'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    closed_at  = db.Column(db.DateTime, nullable=True)
+    is_active  = db.Column(db.Boolean, default=True)
+    note       = db.Column(db.Text, nullable=True)
+
+    items = db.relationship('PantryShoppingItem', backref='session',
+                            lazy='dynamic', cascade='all, delete-orphan',
+                            order_by='PantryShoppingItem.sort_order')
+
+    def __repr__(self):
+        return f'<PantryShoppingSession id={self.id} active={self.is_active}>'
+
+
+class PantryShoppingItem(db.Model):
+    """Singolo prodotto nella lista spesa todo."""
+    __tablename__ = 'pantry_shopping_items'
+
+    id           = db.Column(db.Integer, primary_key=True)
+    session_id   = db.Column(db.Integer, db.ForeignKey('pantry_shopping_sessions.id'),
+                             nullable=False)
+    product_name = db.Column(db.String(200), nullable=False)
+    quantity     = db.Column(db.Float, default=1)
+    unit         = db.Column(db.String(20), default='pz')
+    checked      = db.Column(db.Boolean, default=False)
+    sort_order   = db.Column(db.Integer, default=0)
+
+    def __repr__(self):
+        return f'<PantryShoppingItem {self.product_name} checked={self.checked}>'
