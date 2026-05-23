@@ -246,10 +246,10 @@
     <div class="card" style="margin-bottom:20px">
       <div class="section-header">
         <h3 class="section-title">🤖 Lista della spesa IA</h3>
-        <span id="ollama-status" class="badge" style="font-size:.75rem">⏳ Verifica...</span>
+        <span id="ollama-status" class="badge" style="font-size:.75rem">⏳ Verifica Claude...</span>
       </div>
       <p style="color:var(--muted);font-size:.85rem;margin:0 0 12px">
-        Basata sulle tue abitudini di acquisto degli ultimi 90 giorni.
+        Basata sulle tue abitudini di acquisto degli ultimi 90 giorni. Powered by Claude AI.
       </p>
       <button class="btn btn-outline btn-full" id="ai-btn" onclick="generateShoppingList()" disabled>
         Genera lista della spesa
@@ -351,96 +351,86 @@ async function apiFetch(url, body) {
 /* ── Ollama check + lista spesa IA ── */
 const OLLAMA_URL = 'http://localhost:11434';
 
-async function checkOllama() {
-  const el = document.getElementById('ollama-status');
-  const btn = document.getElementById('ai-btn');
-  try {
-    const r = await fetch(OLLAMA_URL + '/api/tags', { signal: AbortSignal.timeout(2000) });
-    if (r.ok) {
-      el.textContent = '🟢 Ollama attivo';
-      el.style.color = 'var(--success)';
-      btn.disabled = false;
-      btn.textContent = '✨ Genera lista della spesa';
-      return true;
-    }
-  } catch {}
-  el.textContent = '🔴 Ollama non raggiungibile';
-  el.style.color = 'var(--muted)';
-  btn.textContent = 'Ollama non disponibile (sei in casa?)';
-  return false;
-}
 
+/* ── Lista spesa Claude ── */
 async function generateShoppingList() {
   const btn = document.getElementById('ai-btn');
   const resultDiv = document.getElementById('ai-result');
   btn.disabled = true;
-  btn.textContent = '⏳ Analisi in corso...';
+  btn.textContent = '⏳ Claude sta analizzando...';
   resultDiv.innerHTML = '';
 
   try {
-    // 1. Prendi il contesto storico dal server
-    const ctxResp = await fetch('/dispensa/api/ai/context');
-    const ctx = await ctxResp.json();
-
-    // 2. Costruisci il prompt
-    const prompt = `Sei un assistente per la gestione della dispensa domestica italiana.
-Analizza questi dati di acquisto degli ultimi 90 giorni e genera una lista della spesa per la prossima settimana.
-
-DATI:
-${JSON.stringify(ctx, null, 2)}
-
-Rispondi SOLO con un JSON in questo formato (nessun testo extra):
-{
-  "lista": [
-    {"prodotto": "nome", "quantita": 2, "unita": "kg", "motivo": "breve spiegazione"}
-  ],
-  "note": "nota generale opzionale"
-}`;
-
-    // 3. Chiama Ollama localmente
-    const aiResp = await fetch(OLLAMA_URL + '/api/generate', {
+    const r = await fetch('/dispensa/api/claude/shopping-list', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'mistral', prompt, stream: false }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({}),
     });
-    const aiData = await aiResp.json();
-    const raw = aiData.response || '';
+    const json = await r.json();
 
-    let parsed;
-    try {
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
-    } catch {
-      resultDiv.innerHTML = `<p style="color:var(--muted);font-size:.85rem">${raw}</p>`;
+    if (!json.ok) {
+      resultDiv.innerHTML = `<p style="color:var(--danger);font-size:.85rem">❌ ${json.error}</p>`;
       return;
     }
 
-    // 4. Renderizza la lista
-    const items = parsed.lista || [];
+    const items = json.data.lista || [];
     if (!items.length) {
       resultDiv.innerHTML = '<p style="color:var(--success);font-size:.88rem">✅ La dispensa sembra ben fornita!</p>';
       return;
     }
+
+    const priorityColor = { 'alta': 'var(--danger)', 'media': 'var(--warning)', 'bassa': 'var(--muted)' };
     let html = '<div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">';
-    items.forEach(it => {
-      html += `<div style="padding:10px 12px;background:var(--bg-soft);border-radius:var(--radius-sm);border:1px solid var(--line)">
-        <div style="font-weight:600;font-size:.9rem">${it.prodotto} <span style="font-weight:400;color:var(--muted)">${it.quantita} ${it.unita}</span></div>
-        <div style="font-size:.78rem;color:var(--muted);margin-top:2px">${it.motivo}</div>
-      </div>`;
+    items.forEach(function(it) {
+      const col = priorityColor[it.priorita] || 'var(--muted)';
+      html += '<div style="padding:10px 12px;background:var(--bg-soft);border-radius:var(--radius-sm);border:1px solid var(--line);border-left:3px solid ' + col + '">' +
+        '<div style="font-weight:600;font-size:.9rem">' + it.prodotto + ' <span style="font-weight:400;color:var(--muted)">' + it.quantita + ' ' + it.unita + '</span>' +
+        '<span style="font-size:.72rem;font-weight:700;color:' + col + ';margin-left:6px;text-transform:uppercase">' + it.priorita + '</span></div>' +
+        '<div style="font-size:.78rem;color:var(--muted);margin-top:2px">' + it.motivo + '</div>' +
+        '</div>';
     });
     html += '</div>';
-    if (parsed.note) html += `<p style="font-size:.8rem;color:var(--muted);margin:10px 0 0">${parsed.note}</p>`;
+    if (json.data.note) html += '<p style="font-size:.8rem;color:var(--muted);margin:10px 0 0">' + json.data.note + '</p>';
     resultDiv.innerHTML = html;
 
   } catch(e) {
-    resultDiv.innerHTML = '<p style="color:var(--danger);font-size:.85rem">Errore durante la generazione. Ollama è attivo?</p>';
+    resultDiv.innerHTML = '<p style="color:var(--danger);font-size:.85rem">Errore di rete: ' + e.message + '</p>';
   } finally {
     btn.disabled = false;
     btn.textContent = '✨ Rigenera lista';
   }
 }
 
+async function checkClaudeStatus() {
+  const el = document.getElementById('ollama-status');
+  const btn = document.getElementById('ai-btn');
+  try {
+    const r = await fetch('/dispensa/api/claude/shopping-list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ dry_run: true }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const j = await r.json();
+    if (j.error && j.error.includes('API_KEY')) {
+      el.textContent = '⚠️ API Key mancante';
+      el.style.color = 'var(--warning)';
+    } else {
+      el.textContent = '🟢 Claude attivo';
+      el.style.color = 'var(--success)';
+      btn.disabled = false;
+      btn.textContent = '✨ Genera lista della spesa';
+    }
+  } catch(e) {
+    el.textContent = '🟢 Claude disponibile';
+    el.style.color = 'var(--success)';
+    btn.disabled = false;
+    btn.textContent = '✨ Genera lista della spesa';
+  }
+}
+
+
 // Avvia controllo Ollama al caricamento
-checkOllama();
+checkClaudeStatus();
 </script>
 {% endblock %}

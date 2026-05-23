@@ -47,18 +47,31 @@
 .status-bar.error   { background: rgba(224,92,92,.1); border: 1px solid rgba(224,92,92,.25); color: var(--danger); }
 .status-bar.loading { background: rgba(31,163,255,.1); border: 1px solid rgba(31,163,255,.25); color: var(--primary); }
 
-.items-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-.items-table th { padding: 8px 10px; text-align: left; font-size: .75rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--line); }
-.items-table td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.items-table { width: 100%; border-collapse: collapse; font-size: .88rem; table-layout: fixed; }
+.items-table th { padding: 6px 6px; text-align: left; font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 1px solid var(--line); }
+.items-table td { padding: 5px 4px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+/* Larghezze colonne: Prodotto flessibile, le altre fisse */
+.items-table th:nth-child(1), .items-table td:nth-child(1) { width: auto; min-width: 120px; }
+.items-table th:nth-child(2), .items-table td:nth-child(2) { width: 64px; }
+.items-table th:nth-child(3), .items-table td:nth-child(3) { width: 58px; }
+.items-table th:nth-child(4), .items-table td:nth-child(4) { width: 72px; }
+.items-table th:nth-child(5), .items-table td:nth-child(5) { width: 130px; }
+.items-table th:nth-child(6), .items-table td:nth-child(6) { width: 32px; }
 .items-table td input, .items-table td select {
-  width: 100%; padding: 5px 8px; border-radius: var(--radius-xs);
+  width: 100%; padding: 4px 5px; border-radius: var(--radius-xs);
   border: 1px solid var(--line); background: var(--bg-soft);
-  color: var(--text); font-size: .88rem;
+  color: var(--text); font-size: .82rem; box-sizing: border-box;
+  min-width: 0;
 }
 .items-table td input:focus, .items-table td select:focus {
   border-color: var(--primary); outline: none;
 }
+/* Qtà e prezzo: allineati a destra, no spin buttons */
+.items-table td:nth-child(2) input,
+.items-table td:nth-child(4) input { text-align: right; }
+.items-table input[type=number]::-webkit-inner-spin-button,
+.items-table input[type=number]::-webkit-outer-spin-button { opacity: .4; }
 .del-row-btn {
   background: none; border: none; color: var(--muted);
   font-size: 1.1rem; cursor: pointer; padding: 2px 6px;
@@ -145,16 +158,16 @@
 
       {# Tabella prodotti estrapolati #}
       <div id="items-wrap" style="display:none">
-        <div class="table-wrap" style="margin-bottom:14px">
+        <div class="table-wrap" style="margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch">
           <table class="items-table">
             <thead>
               <tr>
                 <th>Prodotto</th>
-                <th style="width:55px">Qtà</th>
-                <th style="width:55px" class="hide-mobile">Unità</th>
-                <th style="width:70px">€</th>
+                <th>Qtà</th>
+                <th class="hide-mobile">Unità</th>
+                <th>€ Prezzo</th>
                 <th>Categoria</th>
-                <th style="width:30px"></th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="items-body"></tbody>
@@ -332,70 +345,42 @@ function loadFile(file) {
 async function analyzeReceipt() {
   if (!currentBase64) { alert('Carica prima uno scontrino.'); return; }
 
-  // Tenta la chiamata anche se il check iniziale non era ok
-  if (!ollamaOk) {
-    // Prova comunque - potrebbe essere diventato disponibile
-    console.log('Ollama non verificato, tentativo diretto...');
-  }
-
   const btn = document.getElementById('analyze-btn');
   const status = document.getElementById('analysis-status');
   btn.disabled = true;
   btn.textContent = '⏳ Analisi in corso...';
-  status.innerHTML = "<span style='color:var(--primary)'>🔍 L'IA sta leggendo lo scontrino...</span>";
+  status.innerHTML = `<span style="color:var(--primary)">🔍 Claude sta leggendo lo scontrino...</span>`;
 
-  const prompt = `Look at this Italian supermarket receipt image carefully.
-Return ONLY a JSON object, no other text, no markdown, no explanation.
-JSON format: {"negozio":"store chain name found at top (e.g. Lidl, Esselunga, Conad)","data":"YYYY-MM-DD","prodotti":[{"nome":"readable Italian product name","quantita":1,"prezzo_totale":1.99,"categoria":"Bevande"}],"totale":77.70}
-Read EVERY product line between the header and SUBTOTALE. Include ALL items. The price is the number on the RIGHT of each product line. Skip lines: SUBTOTALE, TOTALE, IVA, pagamento, importo, documento. Use null for unreadable fields. Return ONLY the JSON.`;
+  // Comprimi immagine prima di inviare
+  var imgToSend = currentBase64;
+  try { imgToSend = await compressImage(currentBase64, 1600, 0.85); } catch(e) {}
 
   try {
-    const body = {
-      model: visionModel || 'llava',
-      prompt,
-      stream: false,
-      options: { num_ctx: 8192 }
-    };
-    // Aggiungi immagine per modelli vision
-    // Comprimi immagine prima di inviare
-    var imgToSend = currentBase64;
-    try {
-      imgToSend = await compressImage(currentBase64, 1200, 0.75);
-    } catch(ce) { imgToSend = currentBase64; }
-
-    if (visionModel && isVisionModel(visionModel)) {
-      body.images = [imgToSend];
-    }
-
-    const r = await fetch(OLLAMA + '/api/generate', {
+    // Chiama il backend Flask che a sua volta chiama Claude API
+    const r = await fetch('/dispensa/api/claude/scan', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({
+        image_base64: imgToSend,
+        media_type: 'image/jpeg'
+      }),
     });
 
-    if (!r.ok) throw new Error('Ollama HTTP ' + r.status);
+    const json = await r.json();
 
-    // Aggiorna il banner se Ollama ha risposto
-    const bar = document.getElementById('ollama-bar');
-    bar.className = 'status-bar ok';
-    bar.innerHTML = '🟢 Ollama attivo — scan scontrino disponibile';
-    ollamaOk = true;
-
-    const data = await r.json();
-    const raw = data.response || '';
-    console.log('[Dispensa] Ollama response:', raw.substring(0, 800));
-
-    let parsed;
-    try {
-      const match = raw.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(match ? match[0] : raw);
-    } catch {
-      status.innerHTML = `<span style="color:var(--warning)">⚠️ L'IA non ha restituito JSON valido. Inserisci i dati manualmente.</span>`;
+    if (!json.ok) {
+      status.innerHTML = `<span style="color:var(--danger)">❌ Errore: ${json.error}</span>`;
       showManualItems();
+      btn.disabled = false;
+      btn.textContent = '🔄 Ri-analizza';
       return;
     }
 
-    // ── Popola negozio e data ──
+    const parsed = json.data;
+    const raw = '';
+    console.log('[Dispensa] Claude response:', JSON.stringify(parsed).substring(0, 500));
+
+    // Popola negozio e data
     if (parsed.negozio && parsed.negozio !== 'null') {
       document.getElementById('inp-store').value = parsed.negozio;
     }
@@ -405,34 +390,29 @@ Read EVERY product line between the header and SUBTOTALE. Include ALL items. The
 
     const prodotti = parsed.prodotti || [];
     if (prodotti.length === 0) {
-      status.innerHTML = '<span style="color:var(--warning)">⚠️ Nessun prodotto rilevato. Aggiungi manualmente.</span>';
+      status.innerHTML = `<span style="color:var(--warning)">⚠️ Nessun prodotto rilevato. Aggiungi manualmente.</span>`;
       showManualItems();
+      btn.disabled = false;
+      btn.textContent = '🔄 Ri-analizza';
       return;
     }
 
-    // ── Valida campi mancanti ──
+    populateItems(prodotti);
+
+    // Valida campi mancanti
     const warnings = [];
     if (!parsed.negozio || parsed.negozio === 'null') warnings.push('negozio');
     if (!parsed.data    || parsed.data    === 'null') warnings.push('data');
+    const nIncompleti = prodotti.filter(p => !p.nome || p.quantita === null || p.prezzo_totale === null).length;
 
-    const prodottiIncompleti = prodotti.filter(p =>
-      !p.nome || p.quantita === null || p.prezzo_totale === null
-    );
-
-    populateItems(prodotti);
-
-    if (warnings.length > 0 || prodottiIncompleti.length > 0) {
-      showMissingFieldsWarning(warnings, prodottiIncompleti.length, prodotti.length);
+    if (warnings.length > 0 || nIncompleti > 0) {
+      showMissingFieldsWarning(warnings, nIncompleti, prodotti.length);
     } else {
       status.innerHTML = `<span style="color:var(--success)">✅ ${prodotti.length} prodotti estratti. Verifica e salva.</span>`;
     }
 
   } catch(e) {
-    const bar = document.getElementById('ollama-bar');
-    bar.className = 'status-bar warn';
-    bar.innerHTML = '🟡 Ollama non risponde. <a href="#" onclick="retryOllama();return false;" style="color:inherit;font-weight:700;text-decoration:underline">🔄 Riprova</a>';
-    ollamaOk = false;
-    status.innerHTML = `<span style="color:var(--danger)">❌ Errore: ${e.name} — ${e.message}</span>`;
+    status.innerHTML = `<span style="color:var(--danger)">❌ Errore di rete: ${e.message}</span>`;
     showManualItems();
   } finally {
     btn.disabled = false;
@@ -440,7 +420,7 @@ Read EVERY product line between the header and SUBTOTALE. Include ALL items. The
   }
 }
 
-/* ── Warning campi mancanti ── */
+
 function showMissingFieldsWarning(missingFields, nIncompleti, nTotali) {
   const status = document.getElementById('analysis-status');
   let html = `<div style="background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.3);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:12px">`;
