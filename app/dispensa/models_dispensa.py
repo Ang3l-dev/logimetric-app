@@ -22,7 +22,7 @@ class PantryProduct(db.Model):
     __tablename__ = 'pantry_products'
 
     id         = db.Column(db.Integer, primary_key=True)
-    name       = db.Column(db.String(200), nullable=False)
+    name       = db.Column(db.String(255), nullable=False, index=True)
     category   = db.Column(db.String(100), default='Altro')
     unit       = db.Column(db.String(20), default='pz')
     barcode          = db.Column(db.String(60), unique=True, nullable=True)
