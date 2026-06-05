@@ -116,7 +116,13 @@ def _safe_unit(value: Any) -> str:
 
 
 def _ensure_stock(product_id: int) -> PantryStock:
-    """Crea il record stock se non esiste ancora."""
+    """
+    Crea il record stock se non esiste ancora.
+
+    Nota:
+    Questa funzione va bene per uso singolo, ma NON deve essere chiamata
+    dentro cicli lunghi durante il salvataggio dello scontrino.
+    """
     stock = PantryStock.query.filter_by(product_id=product_id).first()
 
     if stock:
@@ -135,15 +141,10 @@ def _get_or_create_product(
     unit: str = "pz",
 ) -> PantryProduct:
     """
-    Recupera o crea un prodotto.
+    Recupera o crea un singolo prodotto.
 
-    Correzione importante:
-    prima usavi:
-
-        func.lower(PantryProduct.name) == name.lower()
-
-    Questo può rendere la query più lenta e impedire l'uso corretto degli indici.
-    Qui normalizziamo il nome lato Python e cerchiamo con filter_by(name=...).
+    Questa funzione resta utile per l'inserimento manuale di un prodotto.
+    Per lo scontrino, invece, useremo una logica batch dentro api_save_purchase.
     """
     clean_name = _normalize_product_name(name)
 
@@ -156,7 +157,6 @@ def _get_or_create_product(
     prod = PantryProduct.query.filter_by(name=clean_name).first()
 
     if prod:
-        # Aggiorna categoria/unità solo se mancanti o generiche.
         if clean_category and (not prod.category or prod.category == "Altro"):
             prod.category = clean_category
 
@@ -164,6 +164,17 @@ def _get_or_create_product(
             prod.unit = clean_unit
 
         return prod
+
+    prod = PantryProduct(
+        name=clean_name,
+        category=clean_category,
+        unit=clean_unit,
+    )
+
+    db.session.add(prod)
+    db.session.flush()
+
+    return prod
 
     prod = PantryProduct(
         name=clean_name,
@@ -263,12 +274,11 @@ def api_save_purchase():
     """
     Salva un acquisto singolo o un batch da scontrino.
 
-    Correzioni principali:
-    - commit unico finale;
-    - niente query ripetute per recuperare saved_ids;
-    - parsing sicuro di quantità/prezzi;
-    - rollback e log in caso di errore;
-    - evita query SQL con lower().
+    Versione corretta:
+    - evita query ripetute dentro il ciclo;
+    - recupera prodotti e stock in blocco;
+    - crea gli stock mancanti in blocco;
+    - fa un solo commit finale.
     """
     _require_write()
 
@@ -284,48 +294,141 @@ def api_save_purchase():
             "error": "Nessun prodotto da salvare.",
         }), 400
 
-    saved_names: list[str] = []
-    saved_ids: list[int] = []
+    cleaned_items = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        name = _normalize_product_name(item.get("name"))
+        qty = _safe_float(item.get("quantity"), 1.0)
+        price = _safe_float(item.get("price_total"), 0.0)
+        category = _safe_category(item.get("category"))
+        unit = _safe_unit(item.get("unit"))
+
+        if not name or qty <= 0:
+            continue
+
+        cleaned_items.append({
+            "name": name,
+            "qty": qty,
+            "price": price,
+            "category": category,
+            "unit": unit,
+        })
+
+    if not cleaned_items:
+        return jsonify({
+            "ok": False,
+            "error": "Nessun prodotto valido da salvare.",
+        }), 400
 
     try:
-        for item in items:
-            if not isinstance(item, dict):
+        product_names = sorted({item["name"] for item in cleaned_items})
+
+        current_app.logger.info(
+            "Salvataggio scontrino: %s righe, %s prodotti distinti",
+            len(cleaned_items),
+            len(product_names),
+        )
+
+        # 1) Recupera tutti i prodotti già presenti in una sola query
+        existing_products = (
+            PantryProduct.query
+            .filter(PantryProduct.name.in_(product_names))
+            .all()
+        )
+
+        products_by_name = {
+            product.name: product
+            for product in existing_products
+        }
+
+        # 2) Crea solo i prodotti mancanti
+        for item in cleaned_items:
+            name = item["name"]
+
+            if name in products_by_name:
+                product = products_by_name[name]
+
+                # Aggiorna categoria/unità solo se il prodotto era generico
+                if item["category"] and (not product.category or product.category == "Altro"):
+                    product.category = item["category"]
+
+                if item["unit"] and not product.unit:
+                    product.unit = item["unit"]
+
                 continue
 
-            name = _normalize_product_name(item.get("name"))
-            qty = _safe_float(item.get("quantity"), 1.0)
-            price = _safe_float(item.get("price_total"), 0.0)
-            category = _safe_category(item.get("category"))
-            unit = _safe_unit(item.get("unit"))
+            product = PantryProduct(
+                name=name,
+                category=item["category"],
+                unit=item["unit"],
+            )
 
-            if not name or qty <= 0:
-                continue
+            db.session.add(product)
+            products_by_name[name] = product
 
-            prod = _get_or_create_product(name, category, unit)
-            stock = _ensure_stock(prod.id)
+        # Serve per ottenere gli ID dei nuovi prodotti
+        db.session.flush()
+
+        product_ids = [
+            product.id
+            for product in products_by_name.values()
+            if product.id is not None
+        ]
+
+        # 3) Recupera tutti gli stock esistenti in una sola query
+        existing_stocks = (
+            PantryStock.query
+            .filter(PantryStock.product_id.in_(product_ids))
+            .all()
+        )
+
+        stocks_by_product_id = {
+            stock.product_id: stock
+            for stock in existing_stocks
+        }
+
+        # 4) Crea gli stock mancanti senza fare query nel ciclo
+        for product_id in product_ids:
+            if product_id not in stocks_by_product_id:
+                stock = PantryStock(product_id=product_id)
+                db.session.add(stock)
+                stocks_by_product_id[product_id] = stock
+
+        db.session.flush()
+
+        saved_names = []
+        saved_ids = []
+
+        # 5) Crea gli acquisti e aggiorna lo stock
+        for item in cleaned_items:
+            product = products_by_name[item["name"]]
+            stock = stocks_by_product_id.get(product.id)
+
+            if stock is None:
+                stock = PantryStock(product_id=product.id)
+                db.session.add(stock)
+                db.session.flush()
+                stocks_by_product_id[product.id] = stock
 
             purchase = PantryPurchase(
-                product_id=prod.id,
+                product_id=product.id,
                 user_id=current_user.id,
-                quantity=qty,
-                price_total=price,
+                quantity=item["qty"],
+                price_total=item["price"],
                 purchase_date=purchase_date,
                 store=store,
             )
+
             db.session.add(purchase)
 
-            stock.quantity_current = _safe_float(stock.quantity_current, 0.0) + qty
+            stock.quantity_current = _safe_float(stock.quantity_current, 0.0) + item["qty"]
             stock.updated_at = datetime.utcnow()
 
-            saved_names.append(prod.name)
-            saved_ids.append(prod.id)
-
-        if not saved_ids:
-            db.session.rollback()
-            return jsonify({
-                "ok": False,
-                "error": "Nessun prodotto valido da salvare.",
-            }), 400
+            saved_names.append(product.name)
+            saved_ids.append(product.id)
 
         db.session.commit()
 
@@ -344,7 +447,6 @@ def api_save_purchase():
             "ok": False,
             "error": str(exc),
         }), 500
-
 
 @dispensa_bp.route("/api/products/delete", methods=["POST"])
 @login_required
